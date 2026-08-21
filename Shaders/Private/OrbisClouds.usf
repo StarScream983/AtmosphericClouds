@@ -1,6 +1,7 @@
 #include "/Engine/Public/Platform.ush"
 #include "/Engine/Private/Common.ush"
 #include "/Engine/Private/InstancedStereo.ush"
+#include "/Plugin/OrbisClouds/Noise.ush"
 #include "/Plugin/OrbisClouds/OrbisClouds.ush"
 
 float3 PlanetCenterRelative;
@@ -47,6 +48,17 @@ void MainPS(
 		}
 	}
 
-	const float c = tEnter >= 0. ? 1. : 0.;
-	OutColor = float4(c, c, c, 1.0);
+	//const float c = tEnter >= 0. ? 1. : 0.;
+    //OutColor = float4(c, c, c, 1.0);
+	
+	// Project the shell entry onto the inner sphere so coverage is constant through the layer.
+	const float3 ShellEntryPosition = RayOrigin + RayDirection * tEnter;
+	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
+	const float3 InnerSurfacePosition = DirectionFromPlanetCenter * InnerRadius;
+
+	// Four base-noise cells across the inner sphere's diameter.
+	const float Frequency = 4.0 / max(2.0 * InnerRadius, 1.0);
+	const float NoiseValue = SimplexNoise3D(InnerSurfacePosition * Frequency);
+	const float Noise01 = saturate(NoiseValue * 0.5 + 0.5);
+	OutColor = float4(Noise01, Noise01, Noise01, 1.0);
 }
