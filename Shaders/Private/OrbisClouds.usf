@@ -61,9 +61,14 @@ void MainPS(
 	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
 	const float3 InnerSurfacePosition = DirectionFromPlanetCenter * InnerRadius;
 
-	const float Frequency = NoiseCellsAcrossDiameter / max(2.0 * InnerRadius, 1.0);
-	const float NoiseValue = SampleBaseNoise3D(InnerSurfacePosition * Frequency, BaseNoiseType, NoiseSeed);
-	const float NoiseInterpolation = saturate(NoiseValue * 0.5 + 0.5);
-	const float RemappedNoise = lerp(NoiseOutputMin, NoiseOutputMax, NoiseInterpolation);
-	OutColor = float4(RemappedNoise, RemappedNoise, RemappedNoise, 1.0);
+	const float2 WeatherMap = CalculateWeatherMap(
+		InnerSurfacePosition,
+		InnerRadius,
+		NoiseCellsAcrossDiameter,
+		BaseNoiseType,
+		NoiseSeed,
+		NoiseOutputMin,
+		NoiseOutputMax);
+
+	OutColor = float4(WeatherMap.x, WeatherMap.x, WeatherMap.x, 1.0);
 }

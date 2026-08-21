@@ -21,6 +21,7 @@ public class OrbisClouds : ModuleRules
 			new string[]
 			{
 				"CoreUObject",
+				"EnhancedInput",
 				"Engine",
 				"RenderCore",
 				"Renderer",

@@ -199,6 +199,22 @@ float SampleBaseNoise3D(float3 Position, uint NoiseType, uint Seed)
 	}
 }
 
+float2 CalculateWeatherMap(
+	float3 InnerSurfacePosition,
+	float InnerRadius,
+	float NoiseCellsAcrossDiameter,
+	uint BaseNoiseType,
+	uint NoiseSeed,
+	float NoiseOutputMin,
+	float NoiseOutputMax)
+{
+	const float Frequency = NoiseCellsAcrossDiameter / max(2.0 * InnerRadius, 1.0);
+	const float NoiseValue = SampleBaseNoise3D(InnerSurfacePosition * Frequency, BaseNoiseType, NoiseSeed);
+	const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, NoiseValue * 0.5 + 0.5);
+
+	return float2(Coverage, 0.0);
+}
+
 #define ORBIS_NOISE_FBM_MAX_OCTAVES 8
 
 float FbmSimplexNoise3D(float3 Position, int OctaveCount, uint Seed)
