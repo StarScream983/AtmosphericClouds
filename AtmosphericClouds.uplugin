@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "OrbisClouds",
+	"Description": "Planetary cloud shell rendering (OrbisClouds modules in AtmosphericClouds plugin folder).",
+	"Category": "Rendering",
+	"CanContainContent": true,
+	"Modules": [
+		{
+			"Name": "OrbisCloudsCore",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
+		},
+		{
+			"Name": "OrbisClouds",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ImGui",
+			"Enabled": true
+		}
+	]
+}

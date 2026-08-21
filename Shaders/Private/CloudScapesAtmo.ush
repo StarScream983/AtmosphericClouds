@@ -1,0 +1,177 @@
+#define VIEW_RAY_STEPs 32
+#define OPTICAL_DEPTH_STEPs 16
+#define PI 3.1415926535897932
+#define redWaveLength 700
+#define greenWaveLength 530
+#define blueWaveLength 440
+#define G 0.77
+#define GG 0.5929
+
+struct RMStruct
+{
+	float3 _campos;
+	float3 _sunDir;
+	float3 _planetPos;
+	float _planetRadius;
+	float _atmoRadius;
+	float _falloff;
+	float _sunIntensity;
+	float _scatteringStrength;
+	float _densityMod;
+	float _depth;
+	float _minOpD;
+	float _coeffMod;
+
+	void Init(float3 cp, float3 sd, float3 pp, float pr, float ar, float fof, float si, float ss, float dm, float dpth, float cm, float minOpD)
+	{
+		_campos = cp;
+		_sunDir = sd;
+		_planetPos = pp;
+		_planetRadius = pr;
+		_atmoRadius = ar;
+		_falloff = fof;
+		_sunIntensity = si;
+		_scatteringStrength = ss;
+		_densityMod = dm;
+		_depth = dpth;
+		_minOpD = minOpD;
+		_coeffMod = cm;
+	}
+
+	bool SphIntersect(float3 ro, float3 rd, float3 ce, float ra, out float t0, out float t1)
+	{
+		float3 oc = ro - ce;
+		float a = 1.;
+		float b = 2. * dot(oc, rd);
+		float c = dot(oc, oc) - ra * ra;
+		float h = b * b - 4. * a * c;
+		if (h < 0.0)
+		{
+			t0 = -1.;
+			t1 = -1.;
+			return false;
+		}
+		h = sqrt(h);
+		float r0 = (-b - h) / 2. * a;
+		float r1 = (-b + h) / 2. * a;
+		t0 = min(r0, r1);
+		t1 = max(r0, r1);
+		return (t1 >= 0.);
+	}
+
+	float densityAtPoint(float3 densitySamplePoint)
+	{
+		float heightAboveSurface = length(densitySamplePoint - _planetPos) - _planetRadius;
+		float height01 = heightAboveSurface / (1.8 * (_atmoRadius - _planetRadius));
+		float localDensity = _densityMod * exp(-height01 * _falloff);
+		localDensity *= (1.0 - height01);
+		return localDensity;
+	}
+
+	float opticalDepth(float3 rayOrigin, float3 rayDir, float rayLength)
+	{
+		float stepSize = rayLength / (float(OPTICAL_DEPTH_STEPs) - 1.0);
+		float3 densitySamplePoint = rayOrigin;
+		float accumulatedOpticalDepth = 0.0;
+
+		for (int i = 0; i < OPTICAL_DEPTH_STEPs; i++)
+		{
+			float localDensity = densityAtPoint(densitySamplePoint);
+			accumulatedOpticalDepth += localDensity * stepSize;
+			densitySamplePoint += rayDir * stepSize;
+		}
+
+		return accumulatedOpticalDepth;
+	}
+
+	float3 calculateLight(float3 rayOrigin, float3 rayDir, float rayLength)
+	{
+		float3 samplePoint = rayOrigin;
+		float3 sunDir = _sunDir;
+		float3 wavelength = float3(redWaveLength, greenWaveLength, blueWaveLength);
+		float3 scatteringCoeffs = pow(1063.0 / wavelength.xyz, 4.0) * _scatteringStrength;
+		scatteringCoeffs /= _planetRadius;
+		scatteringCoeffs /= _coeffMod;
+
+		float stepSize = rayLength / (float(VIEW_RAY_STEPs) - 1.0);
+		float3 inScatteredLight = 0.0;
+
+		for (int i = 0; i < VIEW_RAY_STEPs; i++)
+		{
+			if (length(samplePoint - _campos) > _depth)
+			{
+				break;
+			}
+
+			float sunRayLengthInAtm = _atmoRadius - length(samplePoint - _planetPos);
+			float t0, t1;
+			if (SphIntersect(samplePoint, sunDir, _planetPos, _atmoRadius, t0, t1))
+			{
+				sunRayLengthInAtm = t1;
+			}
+
+			float sunRayOpticalDepth = opticalDepth(samplePoint, sunDir, sunRayLengthInAtm);
+			float viewRayLengthInAtm = stepSize * float(i);
+			float viewRayOpticalDepth = opticalDepth(samplePoint, -rayDir, viewRayLengthInAtm);
+			float3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * scatteringCoeffs);
+			float localDensity = densityAtPoint(samplePoint);
+			inScatteredLight += localDensity * transmittance * scatteringCoeffs * stepSize;
+			samplePoint += rayDir * stepSize;
+		}
+
+		float costheta = dot(rayDir, sunDir);
+		float phaseRayleigh = 3.0 / (16.0 * PI) * (1.0 + costheta * costheta);
+		float phaseMie = 0.;
+		inScatteredLight *= (phaseRayleigh + phaseMie);
+		inScatteredLight *= _sunIntensity;
+		return inScatteredLight;
+	}
+
+	float3 scatter(float3 originalColor, float3 rayOrigin, float3 rayDir, float maximumDistance)
+	{
+		float impactPoint, escapePoint;
+		if (!SphIntersect(rayOrigin, rayDir, _planetPos, _atmoRadius, impactPoint, escapePoint))
+		{
+			return originalColor;
+		}
+
+		impactPoint = max(0.0, impactPoint);
+		escapePoint = min(maximumDistance, escapePoint);
+
+		float distanceThroughAtmosphere = max(0.0, escapePoint - impactPoint);
+		float3 firstPointInAtmosphere = rayOrigin + rayDir * impactPoint;
+		float3 light = calculateLight(firstPointInAtmosphere, rayDir, distanceThroughAtmosphere);
+		return originalColor * (1.0 - light) + light;
+	}
+};
+
+float3 CloudScapesGetSunDirection()
+{
+	return float3(0.0, 0.0, 1.0);
+}
+
+float4 EvaluateCloudScapesAtmosphere(
+	float3 CamPos,
+	float3 CamVec,
+	float3 PlanetPos,
+	float3 SunDir,
+	float PlanetRadius,
+	float AtmoRadius,
+	float Falloff,
+	float SunIntensity,
+	float ScatteringStrength,
+	float DensityModifier,
+	float SceneDepth,
+	float CoeffMod,
+	float MinOpD,
+	float MaximumDistance)
+{
+	RMStruct RMS;
+	RMS.Init(CamPos, SunDir, PlanetPos, PlanetRadius, AtmoRadius, Falloff, SunIntensity, ScatteringStrength, DensityModifier, SceneDepth, CoeffMod, MinOpD);
+
+	float Alpha = saturate(SceneDepth / MinOpD);
+	float Opacity = Alpha * 0.3;
+	float3 Col = 0.;
+	float3 FinalCol = RMS.scatter(Col, CamPos, CamVec, MaximumDistance);
+	return float4(FinalCol, Opacity);
+}

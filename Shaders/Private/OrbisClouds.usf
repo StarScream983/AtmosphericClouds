@@ -1,0 +1,62 @@
+#include "/Engine/Public/Platform.ush"
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/InstancedStereo.ush"
+#include "/Plugin/OrbisClouds/OrbisClouds.ush"
+
+float3 PlanetCenterRelative;
+float InnerRadius;
+float OuterRadius;
+float CloudDensity;
+uint bDebugSolid;
+uint bDepthOcclusion;
+
+Texture2D SceneDepthTexture;
+SamplerState SceneDepthSampler;
+
+void MainPS(
+	in noperspective float4 UVAndScreenPos : TEXCOORD0,
+	out float4 OutColor : SV_Target0)
+{
+	if (bDebugSolid != 0u)
+	{
+		OutColor = float4(1.0, 0.0, 1.0, 1.0);
+		return;
+	}
+
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 ScreenPos = UVAndScreenPos.zw;
+	const float3 RayOrigin = float3(0.0, 0.0, 0.0);
+	const float3 RayDirection = ReconstructWorldRayDirection(ScreenPos);
+
+	float tEnter = 0.0;
+	float tExit = 0.0;
+	if (!IntersectAtmosphereShell(RayOrigin, RayDirection, PlanetCenterRelative, InnerRadius, OuterRadius, tEnter, tExit))
+	{
+		discard;
+	}
+
+	if (bDepthOcclusion != 0u)
+	{
+		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
+		const float SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);
+		ClipShellBySceneDepth(tEnter, tExit, SceneRayDistance);
+
+		if (tExit <= tEnter)
+		{
+			discard;
+		}
+	}
+
+	const float SegmentLength = tExit - tEnter;
+	const float OpticalDepth = AccumulateShellOpticalDepth(
+		RayDirection,
+		PlanetCenterRelative,
+		InnerRadius,
+		OuterRadius,
+		tEnter,
+		tExit);
+
+	// Average density along the marched segment (0.1–0.8), not optical depth / shell thickness.
+	const float Grey = saturate(OpticalDepth / max(SegmentLength, 1.0));
+	OutColor = float4(Grey, Grey, Grey, Grey);
+}

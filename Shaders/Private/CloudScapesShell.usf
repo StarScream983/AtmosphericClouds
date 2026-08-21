@@ -1,0 +1,111 @@
+#include "/Engine/Public/Platform.ush"
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/InstancedStereo.ush"
+#include "/Plugin/AtmosphericClouds/CloudScapesShell.ush"
+#include "/Plugin/AtmosphericClouds/CloudScapesAtmo.ush"
+
+float3 PlanetCenterRelative;
+float PlanetSurfaceRadius;
+float AtmoRadius;
+uint bDebugSolid;
+uint bDepthOcclusion;
+
+float AtmoFalloff;
+float AtmoSunIntensity;
+float AtmoScatteringStrength;
+float AtmoDensityModifier;
+float AtmoCoeffMod;
+float AtmoMinOpD;
+
+Texture2D SceneDepthTexture;
+SamplerState SceneDepthSampler;
+
+/*
+void MainPS(
+	in noperspective float4 UVAndScreenPos : TEXCOORD0,
+	out float4 OutColor : SV_Target0)
+{
+	if (bDebugSolid != 0u)
+	{
+		OutColor = float4(1.0, 0.0, 1.0, 1.0);
+		return;
+	}
+
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 ScreenPos = UVAndScreenPos.zw;
+	const float3 RayOrigin = float3(0.0, 0.0, 0.0);
+	const float3 RayDirection = ReconstructWorldRayDirection(ScreenPos);
+
+	float tEnter = 0.0;
+	float tExit = 0.0;
+	if (!IntersectAtmosphereShell(RayOrigin, RayDirection, PlanetCenterRelative, InnerRadius, OuterRadius, tEnter, tExit))
+	{
+		discard;
+	}
+
+	if (bDepthOcclusion != 0u)
+	{
+		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
+		const float SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);
+		ClipShellBySceneDepth(tEnter, tExit, SceneRayDistance);
+
+		if (tExit <= tEnter)
+		{
+			discard;
+		}
+	}
+
+	const float SegmentLength = tExit - tEnter;
+	const float NormalizedLength = saturate(SegmentLength / max(OuterRadius - InnerRadius, 1.0));
+	const float3 ShellColor = float3(0.1, NormalizedLength, 0.9);
+
+	OutColor = float4(ShellColor, 0.5);
+}
+*/
+
+void MainPS(
+	in noperspective float4 UVAndScreenPos : TEXCOORD0,
+	out float4 OutColor : SV_Target0)
+{
+	if (bDebugSolid != 0u)
+	{
+		OutColor = float4(1.0, 0.0, 1.0, 1.0);
+		return;
+	}
+
+	const float2 UV = UVAndScreenPos.xy;
+	const float2 ScreenPos = UVAndScreenPos.zw;
+	const float3 RayOrigin = float3(0.0, 0.0, 0.0);
+	const float3 RayDirection = ReconstructWorldRayDirection(ScreenPos);
+
+	float SceneRayDistance = 1000000000000.0;
+	if (bDepthOcclusion != 0u)
+	{
+		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
+		SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);
+	}
+
+	const float3 SunDir = CloudScapesGetSunDirection();
+	const float4 AtmosphereColor = EvaluateCloudScapesAtmosphere(
+		RayOrigin,
+		RayDirection,
+		PlanetCenterRelative,
+		SunDir,
+		PlanetSurfaceRadius,
+		AtmoRadius,
+		AtmoFalloff,
+		AtmoSunIntensity,
+		AtmoScatteringStrength,
+		AtmoDensityModifier,
+		SceneRayDistance,
+		AtmoCoeffMod,
+		AtmoMinOpD,
+		SceneRayDistance);
+
+	if (AtmosphereColor.a <= 0.0)
+	{
+		discard;
+	}
+
+	OutColor = AtmosphereColor;
+}

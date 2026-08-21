@@ -1,0 +1,246 @@
+bool RaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 SphereCenter, float SphereRadius, out float t0, out float t1)
+{
+	float3 OriginToCenter = RayOrigin - SphereCenter;
+	float B = dot(OriginToCenter, RayDirection);
+	float C = dot(OriginToCenter, OriginToCenter) - SphereRadius * SphereRadius;
+	float Discriminant = B * B - C;
+
+	if (Discriminant < 0.0)
+	{
+		return false;
+	}
+
+	float SqrtDiscriminant = sqrt(Discriminant);
+	t0 = -B - SqrtDiscriminant;
+	t1 = -B + SqrtDiscriminant;
+	return true;
+}
+
+// SceneViewDepth from the depth texture is NOT distance along this pixel's RayDirection.
+// It is how far the surface is along PrimaryView.ViewForward (the camera center axis, cm).
+//
+// Each pixel has its own RayDirection (from ReconstructWorldRayDirection). On screen edges it tilts away from ViewForward.
+// The same surface is a longer distance along RayDirection than along ViewForward.
+//
+// SceneRayDistance = SceneViewDepth / dot(RayDirection, PrimaryView.ViewForward)
+// dot is how aligned RayDirection is with ViewForward (1 = same direction, smaller when tilted).
+// Center pixel: dot ~ 1, SceneRayDistance ~ SceneViewDepth. Corner pixel: dot < 1, SceneRayDistance > SceneViewDepth.
+//
+// ClipShellBySceneDepth compares SceneRayDistance to tEnter/tExit along RayDirection — without this, edge pixels clip fog at the wrong distance.
+float SceneDepthToRayDistance(float SceneViewDepth, float3 RayDirection)
+{
+	return SceneViewDepth / max(dot(RayDirection, PrimaryView.ViewForward), 1e-5);
+}
+
+// Shorten the cloud shell march [tEnter, tExit] so terrain in the scene depth buffer occludes fog behind it.
+void ClipShellBySceneDepth(inout float tEnter, inout float tExit, float SceneRayDistance)
+{
+	// Terrain is at or before the shell entry — no cloud on this pixel.
+	if (SceneRayDistance <= tEnter)
+	{
+		tExit = tEnter;
+		return;
+	}
+
+	// Stop marching at the terrain surface instead of the shell exit.
+	tExit = min(tExit, SceneRayDistance);
+}
+
+bool IntersectAtmosphereShell(
+	float3 RayOrigin,
+	float3 RayDirection,
+	float3 PlanetCenter,
+	float InnerRadius,
+	float OuterRadius,
+	out float tEnter,
+	out float tExit)
+{
+	const float3 OriginToCenter = RayOrigin - PlanetCenter; // offset from planet center to ray origin
+	const float CameraRadiusSq = dot(OriginToCenter, OriginToCenter); // compare camera distance to shell radii without sqrt
+	const float InnerRadiusSq = InnerRadius * InnerRadius; // squared inner radius for comparison
+	const float OuterRadiusSq = OuterRadius * OuterRadius; // squared outer radius for comparison
+
+	float OuterT0 = 0.0;
+	float OuterT1 = 0.0;
+	if (!RaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius, OuterT0, OuterT1)) // ray must hit the outer sphere at all
+	{
+		return false; // no outer hit → ray misses the cloud layer entirely
+	}
+
+	float InnerT0 = 0.0;
+	float InnerT1 = 0.0;
+	const bool bHitsInnerSphere = RaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius, InnerT0, InnerT1); // optional inner hits for clipping
+
+	if (CameraRadiusSq < InnerRadiusSq) // camera is below the cloud floor (inside the inner sphere)
+	{
+		if (!bHitsInnerSphere || InnerT1 <= 0.0) // ray never exits the inner sphere forward into the layer
+		{
+			return false; // no shell segment on this ray
+		}
+
+		tEnter = InnerT1; // shell begins where the ray leaves the inner sphere
+		tExit = OuterT1; // shell ends at the top boundary ahead
+	}
+	else
+	{
+		tEnter = max(OuterT0, 0.0); // clamp outer entry behind camera to 0 when already inside the outer sphere
+		tExit = OuterT1; // default stop: outer boundary ahead
+
+		if (CameraRadiusSq > OuterRadiusSq) // camera is outside the outer sphere — near-side shell only
+		{
+			if (bHitsInnerSphere && InnerT0 > tEnter && InnerT0 < tExit) // ray reaches the bottom shell before the far outer exit
+			{
+				tExit = InnerT0; // stop at inner entry, do not march through the planet
+			}
+			else // ray skims the layer without hitting the inner sphere (common at the limb)
+			{
+				const float tClosestApproach = dot(PlanetCenter - RayOrigin, RayDirection); // distance along ray to closest point to planet center
+				if (tClosestApproach > tEnter) // closest approach is ahead of the camera
+				{
+					tExit = min(tExit, tClosestApproach); // clip the back face — do not march past the near side of the shell
+				}
+			}
+		}
+		else if (bHitsInnerSphere && InnerT0 > 0.0) // camera is in the layer, looking toward the planet hits the bottom shell first
+		{
+			tExit = min(tExit, InnerT0); // stop at the nearer boundary (floor instead of ceiling)
+		}
+	}
+
+	return tExit > tEnter; // valid segment only if there is distance to march
+}
+
+// Builds the world-space view direction for this pixel — unit vector from the camera through the pixel into the scene.
+// Called from OrbisClouds.usf with ScreenPos from UVAndScreenPos.zw (FScreenPassVS fullscreen pass).
+//
+// float3(ScreenPos, 1) — UE screen position as (x, y, 1); the 1 is homogeneous w for the screen-to-world transform.
+// PrimaryView.ScreenToWorld — 3x3 part of the view matrix that maps screen vectors to world space (camera-relative here, RayOrigin is 0).
+// DFToFloat3x3(PrimaryView.ScreenToWorld) — converts the matrix to float3x3 for the multiply.
+// mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)) — maps that screen direction into world space; result is not unit length.
+// .xyz — take the direction part (drop w if present).
+// normalize(...) — unit length so t along the ray is distance in cm (matches RaySphereIntersection).
+float3 ReconstructWorldRayDirection(float2 ScreenPos)
+{
+	return normalize(mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)).xyz);
+}
+
+#define ORBIS_CLOUDS_SHELL_MARCH_STEPS 32
+
+/**
+ * At distance t along RayDirection from the camera (RayOrigin is 0), returns how far that sample point
+ * is from PlanetCenter — the spherical radius at that march step.
+ *
+ * Why not length(t * RayDirection - PlanetCenter):
+ * At planet scale (~1e6 cm and up), subtracting two huge vectors loses float32 precision.
+ * This uses the expanded form of |t * RayDirection - PlanetCenter|^2 instead:
+ *
+ * t * t — along-ray term
+ * 2.0 * t * dot(RayDirection, OC) — cross term (OC = -PlanetCenter)
+ * dot(OC, OC) — squared distance from camera to planet center
+ *
+ * Then sqrt gives radius. max(..., 0.0) avoids negative from float error.
+ *
+ * Used by OrbisCloudsDensityAt during the march — radius vs InnerRadius / OuterRadius sets fog density at each step.
+ *
+ * Needed at large planets: with camera at 0 and PlanetCenter at ~1e6–1e9 cm,
+ * length(t * RayDirection - PlanetCenter) subtracts two huge, nearly parallel vectors → radius and density can wobble or band.
+ * Small local clouds (km scale): plain length is usually fine.
+ * Planet-sized radii in camera-relative space: keep this expanded form.
+ */
+float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
+{
+	const float3 OC = -PlanetCenter;
+	return sqrt(max(t * t + 2.0 * t * dot(RayDirection, OC) + dot(OC, OC), 0.0));
+}
+
+// Thin bottom/top fade bands into a flat 1.0 plateau (HZD slide silhouettes).
+float ThinEdgeFade(float h, float BottomEdge, float TopEdge)
+{
+	const float bottom = smoothstep(0.0, BottomEdge, h);
+	const float top = 1.0 - smoothstep(1.0 - TopEdge, 1.0, h);
+	return bottom * top;
+}
+
+float ThinEdgeFade(float h, float Edge)
+{
+	return ThinEdgeFade(h, Edge, Edge);
+}
+
+// Height fraction in shell: 0 at inner radius, 1 at outer radius.
+float OrbisCloudsGetHeightFraction(float Radius, float InnerRadius, float OuterRadius)
+{
+	const float ShellThickness = OuterRadius - InnerRadius;
+	if (ShellThickness <= 0.0)
+	{
+		return 0.0;
+	}
+
+	return saturate((Radius - InnerRadius) / ShellThickness);
+}
+
+float OrbisCloudsHeightPresetStratus(float h)
+{
+	return ThinEdgeFade(h, 0.08);
+}
+
+float OrbisCloudsHeightPresetCumulus(float h)
+{
+	const float hc = saturate((h - 0.25) / 0.5);
+	return ThinEdgeFade(hc, 0.1);
+}
+
+float OrbisCloudsHeightPresetCumulonimbus(float h)
+{
+	const float hc = saturate((h - 0.05) / 0.9);
+	return ThinEdgeFade(hc, 0.06, 0.12);
+}
+
+// Density at ray distance t: 0.8 at inner (bottom), 0.1 at outer (top). Zero outside the annulus.
+float OrbisCloudsDensityAt(
+	float t,
+	float3 RayDirection,
+	float3 PlanetCenter,
+	float InnerRadius,
+	float OuterRadius)
+{
+	const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenter);
+	const float ShellThickness = OuterRadius - InnerRadius;
+	if (ShellThickness <= 0.0)
+	{
+		return 0.0;
+	}
+
+	const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
+	if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
+	{
+		return 0.0;
+	}
+
+	return lerp(0.8, 0.1, HeightFromBottom);
+}
+
+float AccumulateShellOpticalDepth(
+	float3 RayDirection,
+	float3 PlanetCenter,
+	float InnerRadius,
+	float OuterRadius,
+	float tEnter,
+	float tExit)
+{
+	const float SegmentLength = tExit - tEnter;
+	if (SegmentLength <= 0.0)
+	{
+		return 0.0;
+	}
+
+	const float StepSize = SegmentLength / ORBIS_CLOUDS_SHELL_MARCH_STEPS;
+	float OpticalDepth = 0.0;
+
+	for (int StepIndex = 0; StepIndex < ORBIS_CLOUDS_SHELL_MARCH_STEPS; StepIndex++)
+	{
+		const float t = tEnter + (StepIndex + 0.5) * StepSize;
+		OpticalDepth += OrbisCloudsDensityAt(t, RayDirection, PlanetCenter, InnerRadius, OuterRadius) * StepSize;
+	}
+
+	return OpticalDepth;
+}
