@@ -26,7 +26,7 @@ public:
 	UOrbisCloudsComponent();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Planet", meta = (ClampMin = "1.0"))
-	float PlanetRadius = 500000.f;
+	float AtmosphereRadius = 500000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Planet", meta = (ClampMin = "1.0"))
 	float CloudInnerRadius = 400000.f;

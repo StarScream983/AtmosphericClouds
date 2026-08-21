@@ -9,12 +9,12 @@
 namespace OrbisCloudsPlanetPresets
 {
 	const FVector SmallCenter(1000000., 1000000., 350000.);
-	constexpr float SmallPlanetRadius = 500000.f;
+	constexpr float SmallAtmosphereRadius = 500000.f;
 	constexpr float SmallCloudInnerRadius = 400000.f;
 	constexpr float SmallCloudOuterRadius = 500000.f;
 
 	const FVector LargeCenter(700000000., 700000000., 350000.);
-	constexpr float LargePlanetRadius = 600000000.f;
+	constexpr float LargeAtmosphereRadius = 600000000.f;
 	constexpr float LargeCloudInnerRadius = 520000000.f;
 	constexpr float LargeCloudOuterRadius = 600000000.f;
 }
@@ -33,7 +33,7 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 {
 	FOrbisCloudsPlanetRenderData Data;
 	Data.PlanetCenter = GetComponentLocation();
-	Data.PlanetRadius = PlanetRadius;
+	Data.AtmosphereRadius = AtmosphereRadius;
 	Data.CloudInnerRadius = CloudInnerRadius;
 	Data.CloudOuterRadius = FMath::Max(CloudOuterRadius, CloudInnerRadius + 1.f);
 	Data.CloudDensity = FMath::Clamp(CloudDensity, 0.f, 1.f);
@@ -118,13 +118,13 @@ void UOrbisCloudsComponent::ApplyPlanetScalePreset()
 	{
 	case EOrbisCloudsPlanetScale::Small:
 		SetRelativeLocation(OrbisCloudsPlanetPresets::SmallCenter);
-		PlanetRadius = OrbisCloudsPlanetPresets::SmallPlanetRadius;
+		AtmosphereRadius = OrbisCloudsPlanetPresets::SmallAtmosphereRadius;
 		CloudInnerRadius = OrbisCloudsPlanetPresets::SmallCloudInnerRadius;
 		CloudOuterRadius = OrbisCloudsPlanetPresets::SmallCloudOuterRadius;
 		break;
 	case EOrbisCloudsPlanetScale::Large:
 		SetRelativeLocation(OrbisCloudsPlanetPresets::LargeCenter);
-		PlanetRadius = OrbisCloudsPlanetPresets::LargePlanetRadius;
+		AtmosphereRadius = OrbisCloudsPlanetPresets::LargeAtmosphereRadius;
 		CloudInnerRadius = OrbisCloudsPlanetPresets::LargeCloudInnerRadius;
 		CloudOuterRadius = OrbisCloudsPlanetPresets::LargeCloudOuterRadius;
 		break;
@@ -152,7 +152,7 @@ void UOrbisCloudsComponent::PostEditChangeProperty(FPropertyChangedEvent& Proper
 		ApplyPlanetScalePreset();
 	}
 	else if (PlanetScale != EOrbisCloudsPlanetScale::Custom
-		&& (PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, PlanetRadius)
+		&& (PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, AtmosphereRadius)
 			|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudInnerRadius)
 			|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudOuterRadius)
 			|| PropertyName == USceneComponent::GetRelativeLocationPropertyName()))

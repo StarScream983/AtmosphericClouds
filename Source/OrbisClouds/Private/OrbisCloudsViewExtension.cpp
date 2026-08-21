@@ -56,8 +56,8 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	if (!bShouldDraw && bDebugSolid)
 	{
 		PlanetForPass.PlanetCenter = FVector::ZeroVector;
-		PlanetForPass.CloudInnerRadius = 620000000.f;
-		PlanetForPass.CloudOuterRadius = 650000000.f;
+		PlanetForPass.CloudInnerRadius = 520000000.f;
+		PlanetForPass.CloudOuterRadius = 600000000.f;
 		bShouldDraw = true;
 	}
 

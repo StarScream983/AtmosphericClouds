@@ -1,7 +1,0 @@
-// Test header for plugin shader directory binding.
-// Expected include: #include "/Plugin/CloudScapesCore/Test.ush"
-
-float CloudScapesTestBinding()
-{
-	return 0.5;
-}
