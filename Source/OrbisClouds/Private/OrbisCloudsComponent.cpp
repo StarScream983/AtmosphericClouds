@@ -37,6 +37,13 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 	Data.CloudInnerRadius = CloudInnerRadius;
 	Data.CloudOuterRadius = FMath::Max(CloudOuterRadius, CloudInnerRadius + 1.f);
 	Data.CloudDensity = FMath::Clamp(CloudDensity, 0.f, 1.f);
+	Data.NoiseCellsAcrossDiameter = FMath::Clamp(NoiseCellsAcrossDiameter, 0.1f, 256.f);
+	Data.NoiseSeed = static_cast<uint32>(FMath::Max(NoiseSeed, 0));
+	Data.BaseNoiseType = static_cast<uint32>(BaseNoise);
+	const float ClampedNoiseMin = FMath::Clamp(NoiseOutputMin, -1.f, 1.f);
+	const float ClampedNoiseMax = FMath::Clamp(NoiseOutputMax, -1.f, 1.f);
+	Data.NoiseOutputMin = FMath::Min(ClampedNoiseMin, ClampedNoiseMax);
+	Data.NoiseOutputMax = FMath::Max(ClampedNoiseMin, ClampedNoiseMax);
 	return Data;
 }
 
@@ -77,7 +84,40 @@ void UOrbisCloudsComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 #if WITH_EDITOR
 	if (ImGui::Begin("OrbisClouds"))
 	{
-		ImGui::TextUnformatted("hello");
+		if (ImGui::InputInt("Noise Seed", &NoiseSeed))
+		{
+			NoiseSeed = FMath::Max(NoiseSeed, 0);
+			UpdateSubsystemRegistration();
+		}
+
+		int32 BaseNoiseIndex = static_cast<int32>(BaseNoise);
+		const char* BaseNoiseNames[] = { "Perlin", "Simplex", "Value" };
+		if (ImGui::Combo("Base Noise", &BaseNoiseIndex, BaseNoiseNames, UE_ARRAY_COUNT(BaseNoiseNames)))
+		{
+			BaseNoise = static_cast<EOrbisCloudsBaseNoise>(BaseNoiseIndex);
+			UpdateSubsystemRegistration();
+		}
+
+		if (ImGui::DragFloat("Noise Cells Across Diameter", &NoiseCellsAcrossDiameter, 0.1f, 0.1f, 256.f, "%.2f"))
+		{
+			NoiseCellsAcrossDiameter = FMath::Clamp(NoiseCellsAcrossDiameter, 0.1f, 256.f);
+			UpdateSubsystemRegistration();
+		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("Noise Output");
+
+		if (ImGui::DragFloat("Noise Output Min", &NoiseOutputMin, 0.01f, -1.f, 1.f, "%.2f"))
+		{
+			NoiseOutputMin = FMath::Clamp(NoiseOutputMin, -1.f, NoiseOutputMax);
+			UpdateSubsystemRegistration();
+		}
+
+		if (ImGui::DragFloat("Noise Output Max", &NoiseOutputMax, 0.01f, -1.f, 1.f, "%.2f"))
+		{
+			NoiseOutputMax = FMath::Clamp(NoiseOutputMax, NoiseOutputMin, 1.f);
+			UpdateSubsystemRegistration();
+		}
 	}
 	ImGui::End();
 #endif
@@ -160,7 +200,12 @@ void UOrbisCloudsComponent::PostEditChangeProperty(FPropertyChangedEvent& Proper
 		PlanetScale = EOrbisCloudsPlanetScale::Custom;
 		UpdateSubsystemRegistration();
 	}
-	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudDensity))
+	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudDensity)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseCellsAcrossDiameter)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseSeed)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, BaseNoise)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseOutputMin)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseOutputMax))
 	{
 		UpdateSubsystemRegistration();
 	}

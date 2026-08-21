@@ -8,6 +8,11 @@ float3 PlanetCenterRelative;
 float InnerRadius;
 float OuterRadius;
 float CloudDensity;
+float NoiseCellsAcrossDiameter;
+uint NoiseSeed;
+uint BaseNoiseType;
+float NoiseOutputMin;
+float NoiseOutputMax;
 uint bDebugSolid;
 uint bDepthOcclusion;
 
@@ -56,9 +61,9 @@ void MainPS(
 	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
 	const float3 InnerSurfacePosition = DirectionFromPlanetCenter * InnerRadius;
 
-	// Four base-noise cells across the inner sphere's diameter.
-	const float Frequency = 4.0 / max(2.0 * InnerRadius, 1.0);
-	const float NoiseValue = SimplexNoise3D(InnerSurfacePosition * Frequency);
-	const float Noise01 = saturate(NoiseValue * 0.5 + 0.5);
-	OutColor = float4(Noise01, Noise01, Noise01, 1.0);
+	const float Frequency = NoiseCellsAcrossDiameter / max(2.0 * InnerRadius, 1.0);
+	const float NoiseValue = SampleBaseNoise3D(InnerSurfacePosition * Frequency, BaseNoiseType, NoiseSeed);
+	const float NoiseInterpolation = saturate(NoiseValue * 0.5 + 0.5);
+	const float RemappedNoise = lerp(NoiseOutputMin, NoiseOutputMax, NoiseInterpolation);
+	OutColor = float4(RemappedNoise, RemappedNoise, RemappedNoise, 1.0);
 }

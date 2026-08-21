@@ -97,6 +97,11 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->InnerRadius = PlanetForPass.CloudInnerRadius;
 	PassParameters->OuterRadius = PlanetForPass.CloudOuterRadius;
 	PassParameters->CloudDensity = PlanetForPass.CloudDensity;
+	PassParameters->NoiseCellsAcrossDiameter = PlanetForPass.NoiseCellsAcrossDiameter;
+	PassParameters->NoiseSeed = PlanetForPass.NoiseSeed;
+	PassParameters->BaseNoiseType = PlanetForPass.BaseNoiseType;
+	PassParameters->NoiseOutputMin = PlanetForPass.NoiseOutputMin;
+	PassParameters->NoiseOutputMax = PlanetForPass.NoiseOutputMax;
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;

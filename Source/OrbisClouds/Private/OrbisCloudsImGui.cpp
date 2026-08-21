@@ -9,11 +9,7 @@ static FImGuiDelegateHandle GOrbisCloudsImGuiHandle;
 
 static void DrawOrbisCloudsImGui()
 {
-	if (ImGui::Begin("OrbisClouds"))
-	{
-		ImGui::TextUnformatted("OrbisClouds ImGui is active.");
-	}
-
+	ImGui::Begin("OrbisClouds");
 	ImGui::End();
 }
 #endif

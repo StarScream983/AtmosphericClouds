@@ -46,7 +46,7 @@ float GradientDot(uint Hash, float3 Offset)
 	}
 }
 
-float SimplexCorner3D(int3 Cell, float3 Offset)
+float SimplexCorner3D(int3 Cell, float3 Offset, uint Seed)
 {
 	float Attenuation = 0.6 - dot(Offset, Offset);
 	if (Attenuation <= 0.0)
@@ -55,11 +55,11 @@ float SimplexCorner3D(int3 Cell, float3 Offset)
 	}
 
 	Attenuation *= Attenuation;
-	return Attenuation * Attenuation * GradientDot(Hash3D(Cell, 1337u), Offset);
+	return Attenuation * Attenuation * GradientDot(Hash3D(Cell, Seed), Offset);
 }
 
 // Gradient noise on a skewed simplex lattice, roughly -1..1.
-float SimplexNoise3D(float3 Position)
+float SimplexNoise3D(float3 Position, uint Seed)
 {
 	const float SkewFactor = 1.0 / 3.0;
 	const float UnskewFactor = 1.0 / 6.0;
@@ -114,27 +114,27 @@ float SimplexNoise3D(float3 Position)
 	const float3 Offset3 = Offset0 - 1.0 + 3.0 * UnskewFactor;
 
 	return 32.0 * (
-		SimplexCorner3D(Cell, Offset0)
-		+ SimplexCorner3D(Cell + Corner1, Offset1)
-		+ SimplexCorner3D(Cell + Corner2, Offset2)
-		+ SimplexCorner3D(Cell + int3(1, 1, 1), Offset3));
+		SimplexCorner3D(Cell, Offset0, Seed)
+		+ SimplexCorner3D(Cell + Corner1, Offset1, Seed)
+		+ SimplexCorner3D(Cell + Corner2, Offset2, Seed)
+		+ SimplexCorner3D(Cell + int3(1, 1, 1), Offset3, Seed));
 }
 
 // Lattice value noise, roughly -1..1.
-float ValueNoise3D(float3 Position)
+float ValueNoise3D(float3 Position, uint Seed)
 {
 	const int3 Cell = (int3)floor(Position);
 	const float3 Local = frac(Position);
 	const float3 Interpolant = NoiseFade(Local);
 
-	const float Corner000 = HashToSignedFloat(Hash3D(Cell + int3(0, 0, 0), 1337u));
-	const float Corner100 = HashToSignedFloat(Hash3D(Cell + int3(1, 0, 0), 1337u));
-	const float Corner010 = HashToSignedFloat(Hash3D(Cell + int3(0, 1, 0), 1337u));
-	const float Corner110 = HashToSignedFloat(Hash3D(Cell + int3(1, 1, 0), 1337u));
-	const float Corner001 = HashToSignedFloat(Hash3D(Cell + int3(0, 0, 1), 1337u));
-	const float Corner101 = HashToSignedFloat(Hash3D(Cell + int3(1, 0, 1), 1337u));
-	const float Corner011 = HashToSignedFloat(Hash3D(Cell + int3(0, 1, 1), 1337u));
-	const float Corner111 = HashToSignedFloat(Hash3D(Cell + int3(1, 1, 1), 1337u));
+	const float Corner000 = HashToSignedFloat(Hash3D(Cell + int3(0, 0, 0), Seed));
+	const float Corner100 = HashToSignedFloat(Hash3D(Cell + int3(1, 0, 0), Seed));
+	const float Corner010 = HashToSignedFloat(Hash3D(Cell + int3(0, 1, 0), Seed));
+	const float Corner110 = HashToSignedFloat(Hash3D(Cell + int3(1, 1, 0), Seed));
+	const float Corner001 = HashToSignedFloat(Hash3D(Cell + int3(0, 0, 1), Seed));
+	const float Corner101 = HashToSignedFloat(Hash3D(Cell + int3(1, 0, 1), Seed));
+	const float Corner011 = HashToSignedFloat(Hash3D(Cell + int3(0, 1, 1), Seed));
+	const float Corner111 = HashToSignedFloat(Hash3D(Cell + int3(1, 1, 1), Seed));
 
 	const float K0 = Corner000;
 	const float K1 = Corner100 - Corner000;
@@ -156,20 +156,20 @@ float ValueNoise3D(float3 Position)
 }
 
 // Gradient / Perlin noise, roughly -1..1.
-float PerlinNoise3D(float3 Position)
+float PerlinNoise3D(float3 Position, uint Seed)
 {
 	const int3 Cell = (int3)floor(Position);
 	const float3 Local = frac(Position);
 	const float3 Interpolant = NoiseFade(Local);
 
-	const float Value000 = GradientDot(Hash3D(Cell + int3(0, 0, 0), 1337u), Local - float3(0.0, 0.0, 0.0));
-	const float Value100 = GradientDot(Hash3D(Cell + int3(1, 0, 0), 1337u), Local - float3(1.0, 0.0, 0.0));
-	const float Value010 = GradientDot(Hash3D(Cell + int3(0, 1, 0), 1337u), Local - float3(0.0, 1.0, 0.0));
-	const float Value110 = GradientDot(Hash3D(Cell + int3(1, 1, 0), 1337u), Local - float3(1.0, 1.0, 0.0));
-	const float Value001 = GradientDot(Hash3D(Cell + int3(0, 0, 1), 1337u), Local - float3(0.0, 0.0, 1.0));
-	const float Value101 = GradientDot(Hash3D(Cell + int3(1, 0, 1), 1337u), Local - float3(1.0, 0.0, 1.0));
-	const float Value011 = GradientDot(Hash3D(Cell + int3(0, 1, 1), 1337u), Local - float3(0.0, 1.0, 1.0));
-	const float Value111 = GradientDot(Hash3D(Cell + int3(1, 1, 1), 1337u), Local - float3(1.0, 1.0, 1.0));
+	const float Value000 = GradientDot(Hash3D(Cell + int3(0, 0, 0), Seed), Local - float3(0.0, 0.0, 0.0));
+	const float Value100 = GradientDot(Hash3D(Cell + int3(1, 0, 0), Seed), Local - float3(1.0, 0.0, 0.0));
+	const float Value010 = GradientDot(Hash3D(Cell + int3(0, 1, 0), Seed), Local - float3(0.0, 1.0, 0.0));
+	const float Value110 = GradientDot(Hash3D(Cell + int3(1, 1, 0), Seed), Local - float3(1.0, 1.0, 0.0));
+	const float Value001 = GradientDot(Hash3D(Cell + int3(0, 0, 1), Seed), Local - float3(0.0, 0.0, 1.0));
+	const float Value101 = GradientDot(Hash3D(Cell + int3(1, 0, 1), Seed), Local - float3(1.0, 0.0, 1.0));
+	const float Value011 = GradientDot(Hash3D(Cell + int3(0, 1, 1), Seed), Local - float3(0.0, 1.0, 1.0));
+	const float Value111 = GradientDot(Hash3D(Cell + int3(1, 1, 1), Seed), Local - float3(1.0, 1.0, 1.0));
 
 	return Value000
 		+ Interpolant.x * (Value100 - Value000)
@@ -181,9 +181,27 @@ float PerlinNoise3D(float3 Position)
 		+ Interpolant.x * Interpolant.y * Interpolant.z * (-Value000 + Value100 + Value010 - Value110 + Value001 - Value101 - Value011 + Value111);
 }
 
+#define ORBIS_BASE_NOISE_PERLIN 0u
+#define ORBIS_BASE_NOISE_SIMPLEX 1u
+#define ORBIS_BASE_NOISE_VALUE 2u
+
+float SampleBaseNoise3D(float3 Position, uint NoiseType, uint Seed)
+{
+	switch (NoiseType)
+	{
+	case ORBIS_BASE_NOISE_PERLIN:
+		return PerlinNoise3D(Position, Seed);
+	case ORBIS_BASE_NOISE_VALUE:
+		return ValueNoise3D(Position, Seed);
+	case ORBIS_BASE_NOISE_SIMPLEX:
+	default:
+		return SimplexNoise3D(Position, Seed);
+	}
+}
+
 #define ORBIS_NOISE_FBM_MAX_OCTAVES 8
 
-float FbmSimplexNoise3D(float3 Position, int OctaveCount)
+float FbmSimplexNoise3D(float3 Position, int OctaveCount, uint Seed)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
@@ -191,14 +209,15 @@ float FbmSimplexNoise3D(float3 Position, int OctaveCount)
 	const int Octaves = clamp(OctaveCount, 1, ORBIS_NOISE_FBM_MAX_OCTAVES);
 	for (int OctaveIndex = 0; OctaveIndex < Octaves; OctaveIndex++)
 	{
-		Sum += Amplitude * SimplexNoise3D(Position * Frequency);
+		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
+		Sum += Amplitude * SimplexNoise3D(Position * Frequency, OctaveSeed);
 		Frequency *= 2.0;
 		Amplitude *= 0.5;
 	}
 	return Sum;
 }
 
-float FbmValueNoise3D(float3 Position, int OctaveCount)
+float FbmValueNoise3D(float3 Position, int OctaveCount, uint Seed)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
@@ -206,14 +225,15 @@ float FbmValueNoise3D(float3 Position, int OctaveCount)
 	const int Octaves = clamp(OctaveCount, 1, ORBIS_NOISE_FBM_MAX_OCTAVES);
 	for (int OctaveIndex = 0; OctaveIndex < Octaves; OctaveIndex++)
 	{
-		Sum += Amplitude * ValueNoise3D(Position * Frequency);
+		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
+		Sum += Amplitude * ValueNoise3D(Position * Frequency, OctaveSeed);
 		Frequency *= 2.0;
 		Amplitude *= 0.5;
 	}
 	return Sum;
 }
 
-float FbmPerlinNoise3D(float3 Position, int OctaveCount)
+float FbmPerlinNoise3D(float3 Position, int OctaveCount, uint Seed)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
@@ -221,7 +241,8 @@ float FbmPerlinNoise3D(float3 Position, int OctaveCount)
 	const int Octaves = clamp(OctaveCount, 1, ORBIS_NOISE_FBM_MAX_OCTAVES);
 	for (int OctaveIndex = 0; OctaveIndex < Octaves; OctaveIndex++)
 	{
-		Sum += Amplitude * PerlinNoise3D(Position * Frequency);
+		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
+		Sum += Amplitude * PerlinNoise3D(Position * Frequency, OctaveSeed);
 		Frequency *= 2.0;
 		Amplitude *= 0.5;
 	}

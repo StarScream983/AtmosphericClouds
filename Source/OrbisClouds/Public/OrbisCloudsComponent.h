@@ -15,6 +15,14 @@ enum class EOrbisCloudsPlanetScale : uint8
 	Large UMETA(DisplayName = "Large (planet)"),
 };
 
+UENUM(BlueprintType)
+enum class EOrbisCloudsBaseNoise : uint8
+{
+	Perlin UMETA(DisplayName = "Perlin"),
+	Simplex UMETA(DisplayName = "Simplex"),
+	Value UMETA(DisplayName = "Value"),
+};
+
 #pragma endregion
 
 UCLASS(ClassGroup = (OrbisClouds), meta = (BlueprintSpawnableComponent, DisplayName = "Orbis Clouds Component"))
@@ -36,6 +44,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Planet", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float CloudDensity = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Noise", meta = (ClampMin = "0.1", ClampMax = "256.0"))
+	float NoiseCellsAcrossDiameter = 4.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Noise", meta = (ClampMin = "0"))
+	int32 NoiseSeed = 1337;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Noise")
+	EOrbisCloudsBaseNoise BaseNoise = EOrbisCloudsBaseNoise::Simplex;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Noise", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float NoiseOutputMin = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Noise", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float NoiseOutputMax = 1.f;
 
 	FOrbisCloudsPlanetRenderData BuildPlanetRenderData() const;
 
