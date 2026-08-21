@@ -47,16 +47,6 @@ void MainPS(
 		}
 	}
 
-	const float SegmentLength = tExit - tEnter;
-	const float OpticalDepth = AccumulateShellOpticalDepth(
-		RayDirection,
-		PlanetCenterRelative,
-		InnerRadius,
-		OuterRadius,
-		tEnter,
-		tExit);
-
-	// Average density along the marched segment (0.1–0.8), not optical depth / shell thickness.
-	const float Grey = saturate(OpticalDepth / max(SegmentLength, 1.0));
-	OutColor = float4(Grey, Grey, Grey, Grey);
+	const float c = tEnter >= 0. ? 1. : 0.;
+	OutColor = float4(c, c, c, 1.0);
 }

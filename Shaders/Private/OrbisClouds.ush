@@ -1,19 +1,18 @@
-bool RaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 SphereCenter, float SphereRadius, out float t0, out float t1)
+// IQ sphere intersector: https://iquilezles.org/articles/intersectors/
+// Sphere of size SphereRadius centered at SphereCenter.
+// Returns (tNear, tFar). No hit → (-1, -1).
+float2 IqRaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 SphereCenter, float SphereRadius)
 {
 	float3 OriginToCenter = RayOrigin - SphereCenter;
 	float B = dot(OriginToCenter, RayDirection);
 	float C = dot(OriginToCenter, OriginToCenter) - SphereRadius * SphereRadius;
 	float Discriminant = B * B - C;
-
 	if (Discriminant < 0.0)
 	{
-		return false;
+		return float2(-1.0, -1.0); // no intersection
 	}
-
-	float SqrtDiscriminant = sqrt(Discriminant);
-	t0 = -B - SqrtDiscriminant;
-	t1 = -B + SqrtDiscriminant;
-	return true;
+	Discriminant = sqrt(Discriminant);
+	return float2( max(-B - Discriminant, 0.), max(-B + Discriminant, 0.));
 }
 
 // SceneViewDepth from the depth texture is NOT distance along this pixel's RayDirection.
@@ -55,59 +54,27 @@ bool IntersectAtmosphereShell(
 	out float tEnter,
 	out float tExit)
 {
-	const float3 OriginToCenter = RayOrigin - PlanetCenter; // offset from planet center to ray origin
-	const float CameraRadiusSq = dot(OriginToCenter, OriginToCenter); // compare camera distance to shell radii without sqrt
-	const float InnerRadiusSq = InnerRadius * InnerRadius; // squared inner radius for comparison
-	const float OuterRadiusSq = OuterRadius * OuterRadius; // squared outer radius for comparison
 
-	float OuterT0 = 0.0;
-	float OuterT1 = 0.0;
-	if (!RaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius, OuterT0, OuterT1)) // ray must hit the outer sphere at all
+	const float2 InnerHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius);
+	const float2 OuterHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius);
+
+	if (OuterHit.x >= 0. && OuterHit.y >= 0.)
 	{
-		return false; // no outer hit → ray misses the cloud layer entirely
-	}
+		// intersected outer sphere
+		tEnter = OuterHit.x;
+		tExit = OuterHit.y;
 
-	float InnerT0 = 0.0;
-	float InnerT1 = 0.0;
-	const bool bHitsInnerSphere = RaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius, InnerT0, InnerT1); // optional inner hits for clipping
-
-	if (CameraRadiusSq < InnerRadiusSq) // camera is below the cloud floor (inside the inner sphere)
-	{
-		if (!bHitsInnerSphere || InnerT1 <= 0.0) // ray never exits the inner sphere forward into the layer
+		if(InnerHit.x >= 0. && InnerHit.y >= 0.)
 		{
-			return false; // no shell segment on this ray
+			// intersected inner sphere
+			const float MinInner = min(InnerHit.x, InnerHit.y);
+			tExit = min(tExit, MinInner);
 		}
 
-		tEnter = InnerT1; // shell begins where the ray leaves the inner sphere
-		tExit = OuterT1; // shell ends at the top boundary ahead
+		return true;
 	}
-	else
-	{
-		tEnter = max(OuterT0, 0.0); // clamp outer entry behind camera to 0 when already inside the outer sphere
-		tExit = OuterT1; // default stop: outer boundary ahead
-
-		if (CameraRadiusSq > OuterRadiusSq) // camera is outside the outer sphere — near-side shell only
-		{
-			if (bHitsInnerSphere && InnerT0 > tEnter && InnerT0 < tExit) // ray reaches the bottom shell before the far outer exit
-			{
-				tExit = InnerT0; // stop at inner entry, do not march through the planet
-			}
-			else // ray skims the layer without hitting the inner sphere (common at the limb)
-			{
-				const float tClosestApproach = dot(PlanetCenter - RayOrigin, RayDirection); // distance along ray to closest point to planet center
-				if (tClosestApproach > tEnter) // closest approach is ahead of the camera
-				{
-					tExit = min(tExit, tClosestApproach); // clip the back face — do not march past the near side of the shell
-				}
-			}
-		}
-		else if (bHitsInnerSphere && InnerT0 > 0.0) // camera is in the layer, looking toward the planet hits the bottom shell first
-		{
-			tExit = min(tExit, InnerT0); // stop at the nearer boundary (floor instead of ceiling)
-		}
-	}
-
-	return tExit > tEnter; // valid segment only if there is distance to march
+	else return false;
+	
 }
 
 // Builds the world-space view direction for this pixel — unit vector from the camera through the pixel into the scene.
