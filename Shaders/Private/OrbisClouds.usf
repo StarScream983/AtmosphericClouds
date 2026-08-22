@@ -8,11 +8,15 @@ float3 PlanetCenterRelative;
 float InnerRadius;
 float OuterRadius;
 float CloudDensity;
-float NoiseCellsAcrossDiameter;
+float CloudCoverageNoiseScale;
 uint NoiseSeed;
 uint BaseNoiseType;
 float NoiseOutputMin;
 float NoiseOutputMax;
+float CloudTypeNoiseScale;
+uint CloudTypeNoiseSeed;
+uint CloudTypeNoiseType;
+uint WeatherMapChannel;
 uint bDebugSolid;
 uint bDepthOcclusion;
 
@@ -64,11 +68,15 @@ void MainPS(
 	const float2 WeatherMap = CalculateWeatherMap(
 		InnerSurfacePosition,
 		InnerRadius,
-		NoiseCellsAcrossDiameter,
+		CloudCoverageNoiseScale,
 		BaseNoiseType,
 		NoiseSeed,
 		NoiseOutputMin,
-		NoiseOutputMax);
+		NoiseOutputMax,
+		CloudTypeNoiseScale,
+		CloudTypeNoiseType,
+		CloudTypeNoiseSeed);
 
-	OutColor = float4(WeatherMap.x, WeatherMap.x, WeatherMap.x, 1.0);
+	const float DisplayedWeatherMapValue = WeatherMapChannel == 0u ? WeatherMap.x : WeatherMap.y;
+	OutColor = float4(DisplayedWeatherMapValue, DisplayedWeatherMapValue, DisplayedWeatherMapValue, 1.0);
 }

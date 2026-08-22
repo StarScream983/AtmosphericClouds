@@ -37,13 +37,17 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 	Data.CloudInnerRadius = CloudInnerRadius;
 	Data.CloudOuterRadius = FMath::Max(CloudOuterRadius, CloudInnerRadius + 1.f);
 	Data.CloudDensity = FMath::Clamp(CloudDensity, 0.f, 1.f);
-	Data.NoiseCellsAcrossDiameter = FMath::Clamp(NoiseCellsAcrossDiameter, 0.1f, 256.f);
+	Data.CloudCoverageNoiseScale = FMath::Clamp(CloudCoverageNoiseScale, 0.1f, 256.f);
 	Data.NoiseSeed = static_cast<uint32>(FMath::Max(NoiseSeed, 0));
 	Data.BaseNoiseType = static_cast<uint32>(BaseNoise);
 	const float ClampedNoiseMin = FMath::Clamp(NoiseOutputMin, -1.f, 1.f);
 	const float ClampedNoiseMax = FMath::Clamp(NoiseOutputMax, -1.f, 1.f);
 	Data.NoiseOutputMin = FMath::Min(ClampedNoiseMin, ClampedNoiseMax);
 	Data.NoiseOutputMax = FMath::Max(ClampedNoiseMin, ClampedNoiseMax);
+	Data.CloudTypeNoiseScale = FMath::Clamp(CloudTypeNoiseScale, 0.1f, 256.f);
+	Data.CloudTypeNoiseSeed = static_cast<uint32>(FMath::Max(CloudTypeNoiseSeed, 0));
+	Data.CloudTypeNoiseType = static_cast<uint32>(CloudTypeNoise);
+	Data.WeatherMapChannel = static_cast<uint32>(DisplayedWeatherMapChannel);
 	return Data;
 }
 
@@ -84,7 +88,21 @@ void UOrbisCloudsComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 #if WITH_EDITOR
 	if (ImGui::Begin("OrbisClouds"))
 	{
-		if (ImGui::InputInt("Noise Seed", &NoiseSeed))
+		int32 WeatherMapChannelIndex = static_cast<int32>(DisplayedWeatherMapChannel);
+		const char* WeatherMapChannelNames[] = { "Cloud Coverage", "Cloud Type" };
+		if (ImGui::Combo(
+			"Displayed Weather Map",
+			&WeatherMapChannelIndex,
+			WeatherMapChannelNames,
+			UE_ARRAY_COUNT(WeatherMapChannelNames)))
+		{
+			DisplayedWeatherMapChannel = static_cast<EOrbisCloudsWeatherMapChannel>(WeatherMapChannelIndex);
+			UpdateSubsystemRegistration();
+		}
+
+		ImGui::TextUnformatted("Cloud Coverage");
+
+		if (ImGui::InputInt("Seed##CloudCoverage", &NoiseSeed))
 		{
 			NoiseSeed = FMath::Max(NoiseSeed, 0);
 			UpdateSubsystemRegistration();
@@ -92,15 +110,42 @@ void UOrbisCloudsComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 		int32 BaseNoiseIndex = static_cast<int32>(BaseNoise);
 		const char* BaseNoiseNames[] = { "Perlin", "Simplex", "Value" };
-		if (ImGui::Combo("Base Noise", &BaseNoiseIndex, BaseNoiseNames, UE_ARRAY_COUNT(BaseNoiseNames)))
+		if (ImGui::Combo("Base Noise##CloudCoverage", &BaseNoiseIndex, BaseNoiseNames, UE_ARRAY_COUNT(BaseNoiseNames)))
 		{
 			BaseNoise = static_cast<EOrbisCloudsBaseNoise>(BaseNoiseIndex);
 			UpdateSubsystemRegistration();
 		}
 
-		if (ImGui::DragFloat("Noise Cells Across Diameter", &NoiseCellsAcrossDiameter, 0.1f, 0.1f, 256.f, "%.2f"))
+		if (ImGui::DragFloat("Noise Scale##CloudCoverage", &CloudCoverageNoiseScale, 0.1f, 0.1f, 256.f, "%.2f"))
 		{
-			NoiseCellsAcrossDiameter = FMath::Clamp(NoiseCellsAcrossDiameter, 0.1f, 256.f);
+			CloudCoverageNoiseScale = FMath::Clamp(CloudCoverageNoiseScale, 0.1f, 2048.f);
+			UpdateSubsystemRegistration();
+		}
+
+		ImGui::TextUnformatted("Cloud Type");
+
+		if (ImGui::InputInt("Seed##CloudType", &CloudTypeNoiseSeed))
+		{
+			CloudTypeNoiseSeed = FMath::Max(CloudTypeNoiseSeed, 0);
+			UpdateSubsystemRegistration();
+		}
+
+		int32 CloudTypeNoiseIndex = static_cast<int32>(CloudTypeNoise);
+		if (ImGui::Combo("Base Noise##CloudType", &CloudTypeNoiseIndex, BaseNoiseNames, UE_ARRAY_COUNT(BaseNoiseNames)))
+		{
+			CloudTypeNoise = static_cast<EOrbisCloudsBaseNoise>(CloudTypeNoiseIndex);
+			UpdateSubsystemRegistration();
+		}
+
+		if (ImGui::DragFloat(
+			"Noise Scale##CloudType",
+			&CloudTypeNoiseScale,
+			0.1f,
+			0.1f,
+			256.f,
+			"%.2f"))
+		{
+			CloudTypeNoiseScale = FMath::Clamp(CloudTypeNoiseScale, 0.1f, 4096.f);
 			UpdateSubsystemRegistration();
 		}
 
@@ -201,11 +246,15 @@ void UOrbisCloudsComponent::PostEditChangeProperty(FPropertyChangedEvent& Proper
 		UpdateSubsystemRegistration();
 	}
 	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudDensity)
-		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseCellsAcrossDiameter)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudCoverageNoiseScale)
 		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseSeed)
 		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, BaseNoise)
 		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseOutputMin)
-		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseOutputMax))
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, NoiseOutputMax)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudTypeNoiseScale)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudTypeNoiseSeed)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, CloudTypeNoise)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(UOrbisCloudsComponent, DisplayedWeatherMapChannel))
 	{
 		UpdateSubsystemRegistration();
 	}
