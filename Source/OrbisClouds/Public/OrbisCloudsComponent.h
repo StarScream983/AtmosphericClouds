@@ -5,16 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "OrbisCloudsComponent.generated.h"
 
-#pragma region PlanetScalePresets
-
-UENUM(BlueprintType)
-enum class EOrbisCloudsPlanetScale : uint8
-{
-	Custom UMETA(DisplayName = "Custom"),
-	Small UMETA(DisplayName = "Small (debug)"),
-	Large UMETA(DisplayName = "Large (planet)"),
-};
-
 UENUM(BlueprintType)
 enum class EOrbisCloudsBaseNoise : uint8
 {
@@ -22,15 +12,6 @@ enum class EOrbisCloudsBaseNoise : uint8
 	Simplex UMETA(DisplayName = "Simplex"),
 	Value UMETA(DisplayName = "Value"),
 };
-
-UENUM(BlueprintType)
-enum class EOrbisCloudsWeatherMapChannel : uint8
-{
-	CloudCoverage UMETA(DisplayName = "Cloud Coverage"),
-	CloudType UMETA(DisplayName = "Cloud Type"),
-};
-
-#pragma endregion
 
 UCLASS(ClassGroup = (OrbisClouds), meta = (BlueprintSpawnableComponent, DisplayName = "Orbis Clouds Component"))
 class ORBISCLOUDS_API UOrbisCloudsComponent : public USceneComponent
@@ -76,23 +57,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type")
 	EOrbisCloudsBaseNoise CloudTypeNoise = EOrbisCloudsBaseNoise::Simplex;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Debug")
-	EOrbisCloudsWeatherMapChannel DisplayedWeatherMapChannel = EOrbisCloudsWeatherMapChannel::CloudCoverage;
-
 	FOrbisCloudsPlanetRenderData BuildPlanetRenderData() const;
-
-protected:
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
-private:
-	void UpdateSubsystemRegistration();
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Planet")
-	EOrbisCloudsPlanetScale PlanetScale = EOrbisCloudsPlanetScale::Small;
+	void NotifyChanged();
 
 	UFUNCTION(CallInEditor, Category = "OrbisClouds|Planet")
 	void ApplySmallPlanetPreset();
@@ -101,10 +67,14 @@ public:
 	void ApplyLargePlanetPreset();
 
 protected:
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+	virtual void BeginPlay() override;
+
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
 private:
-	void ApplyPlanetScalePreset();
+	void UpdateSubsystemRegistration();
 };

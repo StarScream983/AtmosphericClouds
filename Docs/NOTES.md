@@ -36,3 +36,46 @@ Differences:
 - Our interpolation is algebraically expanded in places instead of chained `lerp`, but the math is equivalent.
 
 So the visual character should match, but values at a given coordinate will not match the CPU preview exactly. For exact CPU/GPU parity, we must port its signed hash, hash-to-float conversion, and seed parameters exactly.
+
+---
+
+
+## What is `OrbisCloudsCVars.h`
+
+```c++
+#pragma once
+
+#include "HAL/IConsoleManager.h"
+
+extern TAutoConsoleVariable<int32> CVarOrbisCloudsWeatherMapChannel;
+```
+
+It **declares** (doesn't define) one CVar so other `.cpp` files can use it without pulling in the view extension.
+
+## Where it's used
+
+| File | Role |
+|------|------|
+| **`OrbisCloudsViewExtension.cpp`** | **Defines** the CVar and passes it to the shader as `WeatherMapChannel` |
+| **`OrbisCloudsImGui.cpp`** | **Reads/writes** it for the "Displayed Weather Map" combo (Coverage vs Type) |
+
+The CVar itself:
+
+```cpp
+TAutoConsoleVariable<int32> CVarOrbisCloudsWeatherMapChannel(
+	TEXT("r.OrbisClouds.WeatherMapChannel"),
+	0,
+	TEXT("0 = Cloud Coverage. 1 = Cloud Type."),
+	ECVF_RenderThreadSafe);
+```
+
+`DebugSolid` and `DepthOcclusion` stay `static` in that file — only `WeatherMapChannel` was extracted because ImGui needs it too.
+
+## Why it exists
+
+Standard UE pattern:
+
+- **One `.cpp`** owns the CVar definition (linker needs exactly one)
+- **Header with `extern`** lets ImGui toggle `r.OrbisClouds.WeatherMapChannel` without duplicating the variable or including view-extension internals
+
+So the ImGui panel and the render pass stay in sync when you switch between coverage (R) and type (G) in the weather map debug view.

@@ -1,5 +1,6 @@
 #include "OrbisCloudsViewExtension.h"
 
+#include "OrbisCloudsCVars.h"
 #include "OrbisCloudsShader.h"
 #include "OrbisCloudsSubsystem.h"
 #include "FXRenderingUtils.h"
@@ -18,6 +19,12 @@ static TAutoConsoleVariable<int32> CVarOrbisCloudsDepthOcclusion(
 	TEXT("r.OrbisClouds.DepthOcclusion"),
 	1,
 	TEXT("1 = clip shell by scene depth (terrain occludes). 0 = shell ignores depth."),
+	ECVF_RenderThreadSafe);
+
+TAutoConsoleVariable<int32> CVarOrbisCloudsWeatherMapChannel(
+	TEXT("r.OrbisClouds.WeatherMapChannel"),
+	0,
+	TEXT("0 = Cloud Coverage. 1 = Cloud Type."),
 	ECVF_RenderThreadSafe);
 
 FOrbisCloudsViewExtension::FOrbisCloudsViewExtension(const FAutoRegister& AutoRegister, UWorld* InWorld)
@@ -105,7 +112,10 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudTypeNoiseScale = PlanetForPass.CloudTypeNoiseScale;
 	PassParameters->CloudTypeNoiseSeed = PlanetForPass.CloudTypeNoiseSeed;
 	PassParameters->CloudTypeNoiseType = PlanetForPass.CloudTypeNoiseType;
-	PassParameters->WeatherMapChannel = PlanetForPass.WeatherMapChannel;
+	PassParameters->WeatherMapChannel = static_cast<uint32>(FMath::Clamp(
+		CVarOrbisCloudsWeatherMapChannel.GetValueOnRenderThread(),
+		0,
+		1));
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;

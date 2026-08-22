@@ -2,6 +2,19 @@
 
 #include "CoreMinimal.h"
 
+namespace OrbisCloudsPlanetPresets
+{
+	const FVector SmallCenter(1000000., 1000000., 350000.);
+	constexpr float SmallAtmosphereRadius = 500000.f;
+	constexpr float SmallCloudInnerRadius = 480000.f;
+	constexpr float SmallCloudOuterRadius = 500000.f;
+
+	const FVector LargeCenter(700000000., 700000000., 350000.);
+	constexpr float LargeAtmosphereRadius = 600000000.f;
+	constexpr float LargeCloudInnerRadius = 580000000.f;
+	constexpr float LargeCloudOuterRadius = 600000000.f;
+}
+
 struct FOrbisCloudsPlanetRenderData
 {
 	FVector PlanetCenter = FVector::ZeroVector;
@@ -17,5 +30,4 @@ struct FOrbisCloudsPlanetRenderData
 	float CloudTypeNoiseScale = 2.f;
 	uint32 CloudTypeNoiseSeed = 7331u;
 	uint32 CloudTypeNoiseType = 1u;
-	uint32 WeatherMapChannel = 0u;
 };

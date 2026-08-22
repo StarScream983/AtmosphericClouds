@@ -1,6 +1,7 @@
 #include "OrbisCloudsSubsystem.h"
 
 #include "OrbisCloudsComponent.h"
+#include "OrbisCloudsImGui.h"
 #include "OrbisCloudsViewExtension.h"
 #include "EngineUtils.h"
 
@@ -14,6 +15,17 @@ void UOrbisCloudsSubsystem::Deinitialize()
 {
 	ViewExtension.Reset();
 	Super::Deinitialize();
+}
+
+void UOrbisCloudsSubsystem::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	OrbisCloudsImGui::Draw(GetRegisteredPlanet());
+}
+
+TStatId UOrbisCloudsSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UOrbisCloudsSubsystem, STATGROUP_Tickables);
 }
 
 void UOrbisCloudsSubsystem::RegisterPlanet(UOrbisCloudsComponent* Component)
@@ -37,6 +49,11 @@ void UOrbisCloudsSubsystem::UnregisterPlanet(UOrbisCloudsComponent* Component)
 bool UOrbisCloudsSubsystem::HasActivePlanet() const
 {
 	return RegisteredPlanet.IsValid();
+}
+
+UOrbisCloudsComponent* UOrbisCloudsSubsystem::GetRegisteredPlanet() const
+{
+	return RegisteredPlanet.Get();
 }
 
 bool UOrbisCloudsSubsystem::GetPlanetRenderData(FOrbisCloudsPlanetRenderData& OutPlanetData) const

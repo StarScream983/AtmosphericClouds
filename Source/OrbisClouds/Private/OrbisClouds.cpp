@@ -2,18 +2,18 @@
 
 #include "OrbisClouds.h"
 
-//#include "OrbisCloudsImGui.h"
+#include "OrbisCloudsImGui.h"
 
 #define LOCTEXT_NAMESPACE "FOrbisCloudsModule"
 
 void FOrbisCloudsModule::StartupModule()
 {
-	//OrbisCloudsImGui::Register();
+	OrbisCloudsImGui::Register();
 }
 
 void FOrbisCloudsModule::ShutdownModule()
 {
-	//OrbisCloudsImGui::Unregister();
+	OrbisCloudsImGui::Unregister();
 }
 
 #undef LOCTEXT_NAMESPACE
