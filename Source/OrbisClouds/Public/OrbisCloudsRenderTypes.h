@@ -30,6 +30,9 @@ struct FOrbisCloudsPlanetRenderData
 	int32 CloudsCoverageOctaves = 8;
 	float CloudsCoverageLacunarity = 2.f;
 	float CloudsCoverageGain = 0.5f;
+	bool bCloudsCoverageUseWarp = false;
+	float CloudsCoverageWarpStrength = 1.f;
+	int32 CloudsCoverageWarpOctaves = 3;
 	float CloudTypeNoiseScale = 2.f;
 	uint32 CloudTypeNoiseSeed = 7331u;
 	uint32 CloudTypeNoiseType = 1u;

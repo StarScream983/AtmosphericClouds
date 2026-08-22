@@ -26,6 +26,9 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 	Data.CloudsCoverageOctaves = FMath::Clamp(CloudsCoverageOctaves, 1, 8);
 	Data.CloudsCoverageLacunarity = FMath::Clamp(CloudsCoverageLacunarity, 1.f, 4.f);
 	Data.CloudsCoverageGain = FMath::Clamp(CloudsCoverageGain, 0.1f, 0.9f);
+	Data.bCloudsCoverageUseWarp = bCloudsCoverageUseWarp;
+	Data.CloudsCoverageWarpStrength = FMath::Clamp(CloudsCoverageWarpStrength, 0.f, 8.f);
+	Data.CloudsCoverageWarpOctaves = FMath::Clamp(CloudsCoverageWarpOctaves, 1, 8);
 	Data.CloudTypeNoiseScale = FMath::Clamp(CloudTypeNoiseScale, 0.1f, 4096.f);
 	Data.CloudTypeNoiseSeed = static_cast<uint32>(FMath::Max(CloudTypeNoiseSeed, 0));
 	Data.CloudTypeNoiseType = static_cast<uint32>(CloudTypeNoise);

@@ -261,6 +261,19 @@ float SampleFbmNoise3D(float3 Position, int OctaveCount, uint NoiseType, uint Se
 	}
 }
 
+// IQ's domain warp (https://iquilezles.org/articles/warp/), f(p + h(p)), adapted to 3D:
+// h(p) is a float3 built from 3 decorrelated fbm samples (one per axis) at a fixed low octave
+// count, since it only needs to shape a smooth displacement field, not fine detail.
+float3 WarpPosition3D(float3 Position, uint NoiseType, uint Seed, float Lacunarity, float Gain, int WarpOctaves, float WarpStrength)
+{
+	const float3 Offset = float3(
+		SampleFbmNoise3D(Position, WarpOctaves, NoiseType, Seed, Lacunarity, Gain),
+		SampleFbmNoise3D(Position + float3(5.2, 1.3, 2.8), WarpOctaves, NoiseType, Seed + 911u, Lacunarity, Gain),
+		SampleFbmNoise3D(Position + float3(1.7, 9.2, 4.1), WarpOctaves, NoiseType, Seed + 1777u, Lacunarity, Gain));
+
+	return Position + WarpStrength * Offset;
+}
+
 float2 CalculateWeatherMap(
 	float3 InnerSurfacePosition,
 	float InnerRadius,
@@ -272,6 +285,9 @@ float2 CalculateWeatherMap(
 	int CloudsCoverageOctaves,
 	float CloudsCoverageLacunarity,
 	float CloudsCoverageGain,
+	bool bCloudsCoverageUseWarp,
+	float CloudsCoverageWarpStrength,
+	int CloudsCoverageWarpOctaves,
 	float CloudTypeNoiseScale,
 	uint CloudTypeNoiseType,
 	uint CloudTypeNoiseSeed,
@@ -282,7 +298,11 @@ float2 CalculateWeatherMap(
 	const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
 
 	const float CoverageFrequency = CloudCoverageNoiseScale / PlanetDiameter;
-	const float CoverageNoise = SampleFbmNoise3D(InnerSurfacePosition * CoverageFrequency, CloudsCoverageOctaves, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain);
+	const float3 CoverageSamplePosition = InnerSurfacePosition * CoverageFrequency;
+	const float3 WarpedCoveragePosition = bCloudsCoverageUseWarp
+		? WarpPosition3D(CoverageSamplePosition, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain, CloudsCoverageWarpOctaves, CloudsCoverageWarpStrength)
+		: CoverageSamplePosition;
+	const float CoverageNoise = SampleFbmNoise3D(WarpedCoveragePosition, CloudsCoverageOctaves, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain);
 	const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, CoverageNoise * 0.5 + 0.5);
 
 	const float CloudTypeFrequency = CloudTypeNoiseScale / PlanetDiameter;

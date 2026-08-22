@@ -112,6 +112,9 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsCoverageOctaves = PlanetForPass.CloudsCoverageOctaves;
 	PassParameters->CloudsCoverageLacunarity = PlanetForPass.CloudsCoverageLacunarity;
 	PassParameters->CloudsCoverageGain = PlanetForPass.CloudsCoverageGain;
+	PassParameters->bCloudsCoverageUseWarp = PlanetForPass.bCloudsCoverageUseWarp ? 1u : 0u;
+	PassParameters->CloudsCoverageWarpStrength = PlanetForPass.CloudsCoverageWarpStrength;
+	PassParameters->CloudsCoverageWarpOctaves = PlanetForPass.CloudsCoverageWarpOctaves;
 	PassParameters->CloudTypeNoiseScale = PlanetForPass.CloudTypeNoiseScale;
 	PassParameters->CloudTypeNoiseSeed = PlanetForPass.CloudTypeNoiseSeed;
 	PassParameters->CloudTypeNoiseType = PlanetForPass.CloudTypeNoiseType;

@@ -95,6 +95,25 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent *Component)
 		Component->NotifyChanged();
 	}
 
+	ImGui::TextUnformatted("Coverage Warp");
+
+	if (ImGui::Checkbox("Use Warp##CloudCoverage", &Component->bCloudsCoverageUseWarp))
+	{
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::DragFloat("Strength##CloudCoverageWarp", &Component->CloudsCoverageWarpStrength, 0.01f, 0.f, 8.f, "%.2f"))
+	{
+		Component->CloudsCoverageWarpStrength = FMath::Clamp(Component->CloudsCoverageWarpStrength, 0.f, 8.f);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::SliderInt("Warp Octaves##CloudCoverageWarp", &Component->CloudsCoverageWarpOctaves, 1, 8))
+	{
+		Component->CloudsCoverageWarpOctaves = FMath::Clamp(Component->CloudsCoverageWarpOctaves, 1, 8);
+		Component->NotifyChanged();
+	}
+
 	ImGui::TextUnformatted("Cloud Type");
 
 	if (ImGui::InputInt("Seed##CloudType", &Component->CloudTypeNoiseSeed))

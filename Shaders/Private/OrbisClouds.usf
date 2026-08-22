@@ -16,6 +16,9 @@ float NoiseOutputMax;
 int CloudsCoverageOctaves;
 float CloudsCoverageLacunarity;
 float CloudsCoverageGain;
+uint bCloudsCoverageUseWarp;
+float CloudsCoverageWarpStrength;
+int CloudsCoverageWarpOctaves;
 float CloudTypeNoiseScale;
 uint CloudTypeNoiseSeed;
 uint CloudTypeNoiseType;
@@ -82,6 +85,9 @@ void MainPS(
 		CloudsCoverageOctaves,
 		CloudsCoverageLacunarity,
 		CloudsCoverageGain,
+		bCloudsCoverageUseWarp != 0u,
+		CloudsCoverageWarpStrength,
+		CloudsCoverageWarpOctaves,
 		CloudTypeNoiseScale,
 		CloudTypeNoiseType,
 		CloudTypeNoiseSeed,

@@ -57,6 +57,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "0.1", ClampMax = "0.9"))
 	float CloudsCoverageGain = 0.5f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage")
+	bool bCloudsCoverageUseWarp = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "0.0", ClampMax = "8.0"))
+	float CloudsCoverageWarpStrength = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 CloudsCoverageWarpOctaves = 3;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "0.1", ClampMax = "4096.0"))
 	float CloudTypeNoiseScale = 2.f;
 
