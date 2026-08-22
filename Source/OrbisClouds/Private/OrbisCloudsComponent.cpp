@@ -23,9 +23,15 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 	const float ClampedNoiseMax = FMath::Clamp(NoiseOutputMax, -1.f, 1.f);
 	Data.NoiseOutputMin = FMath::Min(ClampedNoiseMin, ClampedNoiseMax);
 	Data.NoiseOutputMax = FMath::Max(ClampedNoiseMin, ClampedNoiseMax);
+	Data.CloudsCoverageOctaves = FMath::Clamp(CloudsCoverageOctaves, 1, 8);
+	Data.CloudsCoverageLacunarity = FMath::Clamp(CloudsCoverageLacunarity, 1.f, 4.f);
+	Data.CloudsCoverageGain = FMath::Clamp(CloudsCoverageGain, 0.1f, 0.9f);
 	Data.CloudTypeNoiseScale = FMath::Clamp(CloudTypeNoiseScale, 0.1f, 4096.f);
 	Data.CloudTypeNoiseSeed = static_cast<uint32>(FMath::Max(CloudTypeNoiseSeed, 0));
 	Data.CloudTypeNoiseType = static_cast<uint32>(CloudTypeNoise);
+	Data.CloudsTypeOctaves = FMath::Clamp(CloudsTypeOctaves, 1, 8);
+	Data.CloudsTypeLacunarity = FMath::Clamp(CloudsTypeLacunarity, 1.f, 4.f);
+	Data.CloudsTypeGain = FMath::Clamp(CloudsTypeGain, 0.1f, 0.9f);
 	return Data;
 }
 

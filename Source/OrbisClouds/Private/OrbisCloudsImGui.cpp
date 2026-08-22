@@ -15,7 +15,7 @@ void OrbisCloudsImGui::Unregister()
 {
 }
 
-void OrbisCloudsImGui::Draw(UOrbisCloudsComponent* Component)
+void OrbisCloudsImGui::Draw(UOrbisCloudsComponent *Component)
 {
 #if WITH_EDITOR
 	if (!ImGui::Begin("OrbisClouds"))
@@ -24,18 +24,16 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent* Component)
 		return;
 	}
 
-	ImGui::TextUnformatted("IMGUI DEBUG CLASS");
-
 	int32 WeatherMapChannelIndex = FMath::Clamp(
 		CVarOrbisCloudsWeatherMapChannel.GetValueOnGameThread(),
 		0,
 		1);
-	const char* WeatherMapChannelNames[] = { "Cloud Coverage", "Cloud Type" };
+	const char *WeatherMapChannelNames[] = {"Cloud Coverage", "Cloud Type"};
 	if (ImGui::Combo(
-		"Displayed Weather Map",
-		&WeatherMapChannelIndex,
-		WeatherMapChannelNames,
-		UE_ARRAY_COUNT(WeatherMapChannelNames)))
+			"Displayed Weather Map",
+			&WeatherMapChannelIndex,
+			WeatherMapChannelNames,
+			UE_ARRAY_COUNT(WeatherMapChannelNames)))
 	{
 		CVarOrbisCloudsWeatherMapChannel->Set(WeatherMapChannelIndex);
 	}
@@ -66,7 +64,7 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent* Component)
 	}
 
 	int32 BaseNoiseIndex = static_cast<int32>(Component->BaseNoise);
-	const char* BaseNoiseNames[] = { "Perlin", "Simplex", "Value" };
+	const char *BaseNoiseNames[] = {"Perlin", "Simplex", "Value"};
 	if (ImGui::Combo("Base Noise##CloudCoverage", &BaseNoiseIndex, BaseNoiseNames, UE_ARRAY_COUNT(BaseNoiseNames)))
 	{
 		Component->BaseNoise = static_cast<EOrbisCloudsBaseNoise>(BaseNoiseIndex);
@@ -76,6 +74,24 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent* Component)
 	if (ImGui::DragFloat("Noise Scale##CloudCoverage", &Component->CloudCoverageNoiseScale, 0.1f, 0.1f, 2048.f, "%.2f"))
 	{
 		Component->CloudCoverageNoiseScale = FMath::Clamp(Component->CloudCoverageNoiseScale, 0.1f, 2048.f);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::SliderInt("Octaves##CloudCoverage", &Component->CloudsCoverageOctaves, 1, 8))
+	{
+		Component->CloudsCoverageOctaves = FMath::Clamp(Component->CloudsCoverageOctaves, 1, 8);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::DragFloat("Lacunarity##CloudCoverage", &Component->CloudsCoverageLacunarity, 0.01f, 1.f, 4.f, "%.2f"))
+	{
+		Component->CloudsCoverageLacunarity = FMath::Clamp(Component->CloudsCoverageLacunarity, 1.f, 4.f);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::DragFloat("Gain##CloudCoverage", &Component->CloudsCoverageGain, 0.01f, 0.1f, 0.9f, "%.2f"))
+	{
+		Component->CloudsCoverageGain = FMath::Clamp(Component->CloudsCoverageGain, 0.1f, 0.9f);
 		Component->NotifyChanged();
 	}
 
@@ -97,6 +113,24 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent* Component)
 	if (ImGui::DragFloat("Noise Scale##CloudType", &Component->CloudTypeNoiseScale, 0.1f, 0.1f, 4096.f, "%.2f"))
 	{
 		Component->CloudTypeNoiseScale = FMath::Clamp(Component->CloudTypeNoiseScale, 0.1f, 4096.f);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::SliderInt("Octaves##CloudType", &Component->CloudsTypeOctaves, 1, 8))
+	{
+		Component->CloudsTypeOctaves = FMath::Clamp(Component->CloudsTypeOctaves, 1, 8);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::DragFloat("Lacunarity##CloudType", &Component->CloudsTypeLacunarity, 0.01f, 1.f, 4.f, "%.2f"))
+	{
+		Component->CloudsTypeLacunarity = FMath::Clamp(Component->CloudsTypeLacunarity, 1.f, 4.f);
+		Component->NotifyChanged();
+	}
+
+	if (ImGui::DragFloat("Gain##CloudType", &Component->CloudsTypeGain, 0.01f, 0.1f, 0.9f, "%.2f"))
+	{
+		Component->CloudsTypeGain = FMath::Clamp(Component->CloudsTypeGain, 0.1f, 0.9f);
 		Component->NotifyChanged();
 	}
 

@@ -13,9 +13,15 @@ uint NoiseSeed;
 uint BaseNoiseType;
 float NoiseOutputMin;
 float NoiseOutputMax;
+int CloudsCoverageOctaves;
+float CloudsCoverageLacunarity;
+float CloudsCoverageGain;
 float CloudTypeNoiseScale;
 uint CloudTypeNoiseSeed;
 uint CloudTypeNoiseType;
+int CloudsTypeOctaves;
+float CloudsTypeLacunarity;
+float CloudsTypeGain;
 uint WeatherMapChannel;
 uint bDebugSolid;
 uint bDepthOcclusion;
@@ -73,9 +79,15 @@ void MainPS(
 		NoiseSeed,
 		NoiseOutputMin,
 		NoiseOutputMax,
+		CloudsCoverageOctaves,
+		CloudsCoverageLacunarity,
+		CloudsCoverageGain,
 		CloudTypeNoiseScale,
 		CloudTypeNoiseType,
-		CloudTypeNoiseSeed);
+		CloudTypeNoiseSeed,
+		CloudsTypeOctaves,
+		CloudsTypeLacunarity,
+		CloudsTypeGain);
 
 	const float DisplayedWeatherMapValue = WeatherMapChannel == 0u ? WeatherMap.x : WeatherMap.y;
 	OutColor = float4(DisplayedWeatherMapValue, DisplayedWeatherMapValue, DisplayedWeatherMapValue, 1.0);

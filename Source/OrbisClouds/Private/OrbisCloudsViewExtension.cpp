@@ -109,9 +109,15 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->BaseNoiseType = PlanetForPass.BaseNoiseType;
 	PassParameters->NoiseOutputMin = PlanetForPass.NoiseOutputMin;
 	PassParameters->NoiseOutputMax = PlanetForPass.NoiseOutputMax;
+	PassParameters->CloudsCoverageOctaves = PlanetForPass.CloudsCoverageOctaves;
+	PassParameters->CloudsCoverageLacunarity = PlanetForPass.CloudsCoverageLacunarity;
+	PassParameters->CloudsCoverageGain = PlanetForPass.CloudsCoverageGain;
 	PassParameters->CloudTypeNoiseScale = PlanetForPass.CloudTypeNoiseScale;
 	PassParameters->CloudTypeNoiseSeed = PlanetForPass.CloudTypeNoiseSeed;
 	PassParameters->CloudTypeNoiseType = PlanetForPass.CloudTypeNoiseType;
+	PassParameters->CloudsTypeOctaves = PlanetForPass.CloudsTypeOctaves;
+	PassParameters->CloudsTypeLacunarity = PlanetForPass.CloudsTypeLacunarity;
+	PassParameters->CloudsTypeGain = PlanetForPass.CloudsTypeGain;
 	PassParameters->WeatherMapChannel = static_cast<uint32>(FMath::Clamp(
 		CVarOrbisCloudsWeatherMapChannel.GetValueOnRenderThread(),
 		0,

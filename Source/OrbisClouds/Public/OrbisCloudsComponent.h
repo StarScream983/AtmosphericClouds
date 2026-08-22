@@ -48,6 +48,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
 	float NoiseOutputMax = 1.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 CloudsCoverageOctaves = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "1.0", ClampMax = "4.0"))
+	float CloudsCoverageLacunarity = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "0.1", ClampMax = "0.9"))
+	float CloudsCoverageGain = 0.5f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "0.1", ClampMax = "4096.0"))
 	float CloudTypeNoiseScale = 2.f;
 
@@ -56,6 +65,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type")
 	EOrbisCloudsBaseNoise CloudTypeNoise = EOrbisCloudsBaseNoise::Simplex;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 CloudsTypeOctaves = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "1.0", ClampMax = "4.0"))
+	float CloudsTypeLacunarity = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "0.1", ClampMax = "0.9"))
+	float CloudsTypeGain = 0.5f;
 
 	FOrbisCloudsPlanetRenderData BuildPlanetRenderData() const;
 	void NotifyChanged();

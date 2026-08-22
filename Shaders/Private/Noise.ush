@@ -27,22 +27,38 @@ float GradientDot(uint Hash, float3 Offset)
 	// Twelve cube-edge gradients, selected without trigonometry.
 	switch (Hash & 15u)
 	{
-	case 0u:  return  Offset.x + Offset.y;
-	case 1u:  return -Offset.x + Offset.y;
-	case 2u:  return  Offset.x - Offset.y;
-	case 3u:  return -Offset.x - Offset.y;
-	case 4u:  return  Offset.x + Offset.z;
-	case 5u:  return -Offset.x + Offset.z;
-	case 6u:  return  Offset.x - Offset.z;
-	case 7u:  return -Offset.x - Offset.z;
-	case 8u:  return  Offset.y + Offset.z;
-	case 9u:  return -Offset.y + Offset.z;
-	case 10u: return  Offset.y - Offset.z;
-	case 11u: return -Offset.y - Offset.z;
-	case 12u: return  Offset.x + Offset.y;
-	case 13u: return -Offset.x + Offset.y;
-	case 14u: return -Offset.y + Offset.z;
-	default:  return  Offset.y - Offset.z;
+	case 0u:
+		return Offset.x + Offset.y;
+	case 1u:
+		return -Offset.x + Offset.y;
+	case 2u:
+		return Offset.x - Offset.y;
+	case 3u:
+		return -Offset.x - Offset.y;
+	case 4u:
+		return Offset.x + Offset.z;
+	case 5u:
+		return -Offset.x + Offset.z;
+	case 6u:
+		return Offset.x - Offset.z;
+	case 7u:
+		return -Offset.x - Offset.z;
+	case 8u:
+		return Offset.y + Offset.z;
+	case 9u:
+		return -Offset.y + Offset.z;
+	case 10u:
+		return Offset.y - Offset.z;
+	case 11u:
+		return -Offset.y - Offset.z;
+	case 12u:
+		return Offset.x + Offset.y;
+	case 13u:
+		return -Offset.x + Offset.y;
+	case 14u:
+		return -Offset.y + Offset.z;
+	default:
+		return Offset.y - Offset.z;
 	}
 }
 
@@ -113,11 +129,7 @@ float SimplexNoise3D(float3 Position, uint Seed)
 	const float3 Offset2 = Offset0 - (float3)Corner2 + 2.0 * UnskewFactor;
 	const float3 Offset3 = Offset0 - 1.0 + 3.0 * UnskewFactor;
 
-	return 32.0 * (
-		SimplexCorner3D(Cell, Offset0, Seed)
-		+ SimplexCorner3D(Cell + Corner1, Offset1, Seed)
-		+ SimplexCorner3D(Cell + Corner2, Offset2, Seed)
-		+ SimplexCorner3D(Cell + int3(1, 1, 1), Offset3, Seed));
+	return 32.0 * (SimplexCorner3D(Cell, Offset0, Seed) + SimplexCorner3D(Cell + Corner1, Offset1, Seed) + SimplexCorner3D(Cell + Corner2, Offset2, Seed) + SimplexCorner3D(Cell + int3(1, 1, 1), Offset3, Seed));
 }
 
 // Lattice value noise, roughly -1..1.
@@ -145,14 +157,7 @@ float ValueNoise3D(float3 Position, uint Seed)
 	const float K6 = Corner000 - Corner100 - Corner001 + Corner101;
 	const float K7 = -Corner000 + Corner100 + Corner010 - Corner110 + Corner001 - Corner101 - Corner011 + Corner111;
 
-	return K0
-		+ K1 * Interpolant.x
-		+ K2 * Interpolant.y
-		+ K3 * Interpolant.z
-		+ K4 * Interpolant.x * Interpolant.y
-		+ K5 * Interpolant.y * Interpolant.z
-		+ K6 * Interpolant.z * Interpolant.x
-		+ K7 * Interpolant.x * Interpolant.y * Interpolant.z;
+	return K0 + K1 * Interpolant.x + K2 * Interpolant.y + K3 * Interpolant.z + K4 * Interpolant.x * Interpolant.y + K5 * Interpolant.y * Interpolant.z + K6 * Interpolant.z * Interpolant.x + K7 * Interpolant.x * Interpolant.y * Interpolant.z;
 }
 
 // Gradient / Perlin noise, roughly -1..1.
@@ -171,14 +176,7 @@ float PerlinNoise3D(float3 Position, uint Seed)
 	const float Value011 = GradientDot(Hash3D(Cell + int3(0, 1, 1), Seed), Local - float3(0.0, 1.0, 1.0));
 	const float Value111 = GradientDot(Hash3D(Cell + int3(1, 1, 1), Seed), Local - float3(1.0, 1.0, 1.0));
 
-	return Value000
-		+ Interpolant.x * (Value100 - Value000)
-		+ Interpolant.y * (Value010 - Value000)
-		+ Interpolant.z * (Value001 - Value000)
-		+ Interpolant.x * Interpolant.y * (Value000 - Value100 - Value010 + Value110)
-		+ Interpolant.y * Interpolant.z * (Value000 - Value010 - Value001 + Value011)
-		+ Interpolant.z * Interpolant.x * (Value000 - Value100 - Value001 + Value101)
-		+ Interpolant.x * Interpolant.y * Interpolant.z * (-Value000 + Value100 + Value010 - Value110 + Value001 - Value101 - Value011 + Value111);
+	return Value000 + Interpolant.x * (Value100 - Value000) + Interpolant.y * (Value010 - Value000) + Interpolant.z * (Value001 - Value000) + Interpolant.x * Interpolant.y * (Value000 - Value100 - Value010 + Value110) + Interpolant.y * Interpolant.z * (Value000 - Value010 - Value001 + Value011) + Interpolant.z * Interpolant.x * (Value000 - Value100 - Value001 + Value101) + Interpolant.x * Interpolant.y * Interpolant.z * (-Value000 + Value100 + Value010 - Value110 + Value001 - Value101 - Value011 + Value111);
 }
 
 #define ORBIS_BASE_NOISE_PERLIN 0u
@@ -199,72 +197,41 @@ float SampleBaseNoise3D(float3 Position, uint NoiseType, uint Seed)
 	}
 }
 
-float2 CalculateWeatherMap(
-	float3 InnerSurfacePosition,
-	float InnerRadius,
-	float CloudCoverageNoiseScale,
-	uint BaseNoiseType,
-	uint NoiseSeed,
-	float NoiseOutputMin,
-	float NoiseOutputMax,
-	float CloudTypeNoiseScale,
-	uint CloudTypeNoiseType,
-	uint CloudTypeNoiseSeed)
-{
-	const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
-
-	const float CoverageFrequency = CloudCoverageNoiseScale / PlanetDiameter;
-	const float CoverageNoise = SampleBaseNoise3D(
-		InnerSurfacePosition * CoverageFrequency,
-		BaseNoiseType,
-		NoiseSeed);
-	const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, CoverageNoise * 0.5 + 0.5);
-
-	const float CloudTypeFrequency = CloudTypeNoiseScale / PlanetDiameter;
-	const float CloudTypeNoiseValue = SampleBaseNoise3D(
-		InnerSurfacePosition * CloudTypeFrequency,
-		CloudTypeNoiseType,
-		CloudTypeNoiseSeed);
-	const float CloudType = saturate(CloudTypeNoiseValue * 0.5 + 0.5);
-
-	return float2(Coverage, CloudType);
-}
-
 #define ORBIS_NOISE_FBM_MAX_OCTAVES 8
 
-float FbmSimplexNoise3D(float3 Position, int OctaveCount, uint Seed)
+float FbmSimplexNoise3D(float3 Position, int OctaveCount, uint Seed, float Lacunarity, float Gain)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
-	float Frequency = 1.0;
+	float FbmFrequency = 1.0;
 	const int Octaves = clamp(OctaveCount, 1, ORBIS_NOISE_FBM_MAX_OCTAVES);
 	for (int OctaveIndex = 0; OctaveIndex < Octaves; OctaveIndex++)
 	{
 		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
-		Sum += Amplitude * SimplexNoise3D(Position * Frequency, OctaveSeed);
-		Frequency *= 2.0;
-		Amplitude *= 0.5;
+		Sum += Amplitude * SimplexNoise3D(Position * FbmFrequency, OctaveSeed);
+		FbmFrequency *= Lacunarity;
+		Amplitude *= Gain;
 	}
 	return Sum;
 }
 
-float FbmValueNoise3D(float3 Position, int OctaveCount, uint Seed)
+float FbmValueNoise3D(float3 Position, int OctaveCount, uint Seed, float Lacunarity, float Gain)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
-	float Frequency = 1.0;
+	float FbmFrequency = 1.0;
 	const int Octaves = clamp(OctaveCount, 1, ORBIS_NOISE_FBM_MAX_OCTAVES);
 	for (int OctaveIndex = 0; OctaveIndex < Octaves; OctaveIndex++)
 	{
 		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
-		Sum += Amplitude * ValueNoise3D(Position * Frequency, OctaveSeed);
-		Frequency *= 2.0;
-		Amplitude *= 0.5;
+		Sum += Amplitude * ValueNoise3D(Position * FbmFrequency, OctaveSeed);
+		FbmFrequency *= Lacunarity;
+		Amplitude *= Gain;
 	}
 	return Sum;
 }
 
-float FbmPerlinNoise3D(float3 Position, int OctaveCount, uint Seed)
+float FbmPerlinNoise3D(float3 Position, int OctaveCount, uint Seed, float Lacunarity, float Gain)
 {
 	float Sum = 0.0;
 	float Amplitude = 0.5;
@@ -274,8 +241,59 @@ float FbmPerlinNoise3D(float3 Position, int OctaveCount, uint Seed)
 	{
 		const uint OctaveSeed = Seed + (uint)OctaveIndex * 1013u;
 		Sum += Amplitude * PerlinNoise3D(Position * Frequency, OctaveSeed);
-		Frequency *= 2.0;
-		Amplitude *= 0.5;
+		Frequency *= Lacunarity;
+		Amplitude *= Gain;
 	}
 	return Sum;
+}
+
+float SampleFbmNoise3D(float3 Position, int OctaveCount, uint NoiseType, uint Seed, float Lacunarity, float Gain)
+{
+	switch (NoiseType)
+	{
+	case ORBIS_BASE_NOISE_PERLIN:
+		return FbmPerlinNoise3D(Position, OctaveCount, Seed, Lacunarity, Gain);
+	case ORBIS_BASE_NOISE_VALUE:
+		return FbmValueNoise3D(Position, OctaveCount, Seed, Lacunarity, Gain);
+	case ORBIS_BASE_NOISE_SIMPLEX:
+	default:
+		return FbmSimplexNoise3D(Position, OctaveCount, Seed, Lacunarity, Gain);
+	}
+}
+
+float2 CalculateWeatherMap(
+	float3 InnerSurfacePosition,
+	float InnerRadius,
+	float CloudCoverageNoiseScale,
+	uint BaseNoiseType,
+	uint NoiseSeed,
+	float NoiseOutputMin,
+	float NoiseOutputMax,
+	int CloudsCoverageOctaves,
+	float CloudsCoverageLacunarity,
+	float CloudsCoverageGain,
+	float CloudTypeNoiseScale,
+	uint CloudTypeNoiseType,
+	uint CloudTypeNoiseSeed,
+	int CloudsTypeOctaves,
+	float CloudsTypeLacunarity,
+	float CloudsTypeGain)
+{
+	const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
+
+	const float CoverageFrequency = CloudCoverageNoiseScale / PlanetDiameter;
+	const float CoverageNoise = SampleFbmNoise3D(InnerSurfacePosition * CoverageFrequency, CloudsCoverageOctaves, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain);
+	const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, CoverageNoise * 0.5 + 0.5);
+
+	const float CloudTypeFrequency = CloudTypeNoiseScale / PlanetDiameter;
+	const float CloudTypeNoiseValue = SampleFbmNoise3D(
+		InnerSurfacePosition * CloudTypeFrequency,
+		CloudsTypeOctaves,
+		CloudTypeNoiseType,
+		CloudTypeNoiseSeed,
+		CloudsTypeLacunarity,
+		CloudsTypeGain);
+	const float CloudType = saturate(CloudTypeNoiseValue * 0.5 + 0.5);
+
+	return float2(Coverage, CloudType);
 }

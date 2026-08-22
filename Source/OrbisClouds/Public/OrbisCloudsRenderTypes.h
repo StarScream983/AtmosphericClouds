@@ -27,7 +27,13 @@ struct FOrbisCloudsPlanetRenderData
 	uint32 BaseNoiseType = 1u;
 	float NoiseOutputMin = -1.f;
 	float NoiseOutputMax = 1.f;
+	int32 CloudsCoverageOctaves = 8;
+	float CloudsCoverageLacunarity = 2.f;
+	float CloudsCoverageGain = 0.5f;
 	float CloudTypeNoiseScale = 2.f;
 	uint32 CloudTypeNoiseSeed = 7331u;
 	uint32 CloudTypeNoiseType = 1u;
+	int32 CloudsTypeOctaves = 8;
+	float CloudsTypeLacunarity = 2.f;
+	float CloudsTypeGain = 0.5f;
 };
