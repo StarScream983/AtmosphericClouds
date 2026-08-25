@@ -31,7 +31,7 @@ public:
 		SHADER_PARAMETER(int32, CloudsTypeOctaves)
 		SHADER_PARAMETER(float, CloudsTypeLacunarity)
 		SHADER_PARAMETER(float, CloudsTypeGain)
-		SHADER_PARAMETER(uint32, WeatherMapChannel)
+		SHADER_PARAMETER(uint32, CloudsViewMode)
 		SHADER_PARAMETER(uint32, bDebugSolid)
 		SHADER_PARAMETER(uint32, bDepthOcclusion)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, SceneDepthTexture)

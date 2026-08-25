@@ -1,3 +1,46 @@
+// RAY SPHARE INTERSECTION AND CLOUD SHELL DEFINITION-----------------------------------------------
+
+// Builds the world-space view direction for this pixel — unit vector from the camera through the pixel into the scene.
+// Called from OrbisClouds.usf with ScreenPos from UVAndScreenPos.zw (FScreenPassVS fullscreen pass).
+//
+// float3(ScreenPos, 1) — UE screen position as (x, y, 1); the 1 is homogeneous w for the screen-to-world transform.
+// PrimaryView.ScreenToWorld — 3x3 part of the view matrix that maps screen vectors to world space (camera-relative here, RayOrigin is 0).
+// DFToFloat3x3(PrimaryView.ScreenToWorld) — converts the matrix to float3x3 for the multiply.
+// mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)) — maps that screen direction into world space; result is not unit length.
+// .xyz — take the direction part (drop w if present).
+// normalize(...) — unit length so t along the ray is distance in cm (matches RaySphereIntersection).
+float3 ReconstructWorldRayDirection(float2 ScreenPos)
+{
+	return normalize(mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)).xyz);
+}
+
+/**
+ * At distance t along RayDirection from the camera (RayOrigin is 0), returns how far that sample point
+ * is from PlanetCenter — the spherical radius at that march step.
+ *
+ * Why not length(t * RayDirection - PlanetCenter):
+ * At planet scale (~1e6 cm and up), subtracting two huge vectors loses float32 precision.
+ * This uses the expanded form of |t * RayDirection - PlanetCenter|^2 instead:
+ *
+ * t * t — along-ray term
+ * 2.0 * t * dot(RayDirection, OC) — cross term (OC = -PlanetCenter)
+ * dot(OC, OC) — squared distance from camera to planet center
+ *
+ * Then sqrt gives radius. max(..., 0.0) avoids negative from float error.
+ *
+ * Used by OrbisCloudsDensityAt during the march — radius vs InnerRadius / OuterRadius sets fog density at each step.
+ *
+ * Needed at large planets: with camera at 0 and PlanetCenter at ~1e6–1e9 cm,
+ * length(t * RayDirection - PlanetCenter) subtracts two huge, nearly parallel vectors → radius and density can wobble or band.
+ * Small local clouds (km scale): plain length is usually fine.
+ * Planet-sized radii in camera-relative space: keep this expanded form.
+ */
+float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
+{
+	const float3 OC = -PlanetCenter;
+	return sqrt(max(t * t + 2.0 * t * dot(RayDirection, OC) + dot(OC, OC), 0.0));
+}
+
 // IQ sphere intersector: https://iquilezles.org/articles/intersectors/
 // Sphere of size SphereRadius centered at SphereCenter.
 // Returns (tNear, tFar). No hit → (-1, -1).
@@ -12,8 +55,42 @@ float2 IqRaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 Sph
 		return float2(-1.0, -1.0); // no intersection
 	}
 	Discriminant = sqrt(Discriminant);
-	return float2( max(-B - Discriminant, 0.), max(-B + Discriminant, 0.));
+	return float2(max(-B - Discriminant, 0.), max(-B + Discriminant, 0.));
 }
+
+bool IntersectAtmosphereShell(
+	float3 RayOrigin,
+	float3 RayDirection,
+	float3 PlanetCenter,
+	float InnerRadius,
+	float OuterRadius,
+	out float tEnter,
+	out float tExit)
+{
+
+	const float2 InnerHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius);
+	const float2 OuterHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius);
+
+	if (OuterHit.x >= 0. && OuterHit.y >= 0.)
+	{
+		// intersected outer sphere
+		tEnter = OuterHit.x;
+		tExit = OuterHit.y;
+
+		if (InnerHit.x >= 0. && InnerHit.y >= 0.)
+		{
+			// intersected inner sphere
+			const float MinInner = min(InnerHit.x, InnerHit.y);
+			tExit = min(tExit, MinInner);
+		}
+
+		return true;
+	}
+	else
+		return false;
+}
+
+// DEPTH OCCLUSION-------------------------------------------------------------------------------------
 
 // SceneViewDepth from the depth texture is NOT distance along this pixel's RayDirection.
 // It is how far the surface is along PrimaryView.ViewForward (the camera center axis, cm).
@@ -45,80 +122,10 @@ void ClipShellBySceneDepth(inout float tEnter, inout float tExit, float SceneRay
 	tExit = min(tExit, SceneRayDistance);
 }
 
-bool IntersectAtmosphereShell(
-	float3 RayOrigin,
-	float3 RayDirection,
-	float3 PlanetCenter,
-	float InnerRadius,
-	float OuterRadius,
-	out float tEnter,
-	out float tExit)
-{
+// RAYMARCHING OPTICAL DEPTH, DENSITY AND CLOUD SHAPES----------------------------------------------
 
-	const float2 InnerHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius);
-	const float2 OuterHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius);
-
-	if (OuterHit.x >= 0. && OuterHit.y >= 0.)
-	{
-		// intersected outer sphere
-		tEnter = OuterHit.x;
-		tExit = OuterHit.y;
-
-		if(InnerHit.x >= 0. && InnerHit.y >= 0.)
-		{
-			// intersected inner sphere
-			const float MinInner = min(InnerHit.x, InnerHit.y);
-			tExit = min(tExit, MinInner);
-		}
-
-		return true;
-	}
-	else return false;
-	
-}
-
-// Builds the world-space view direction for this pixel — unit vector from the camera through the pixel into the scene.
-// Called from OrbisClouds.usf with ScreenPos from UVAndScreenPos.zw (FScreenPassVS fullscreen pass).
-//
-// float3(ScreenPos, 1) — UE screen position as (x, y, 1); the 1 is homogeneous w for the screen-to-world transform.
-// PrimaryView.ScreenToWorld — 3x3 part of the view matrix that maps screen vectors to world space (camera-relative here, RayOrigin is 0).
-// DFToFloat3x3(PrimaryView.ScreenToWorld) — converts the matrix to float3x3 for the multiply.
-// mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)) — maps that screen direction into world space; result is not unit length.
-// .xyz — take the direction part (drop w if present).
-// normalize(...) — unit length so t along the ray is distance in cm (matches RaySphereIntersection).
-float3 ReconstructWorldRayDirection(float2 ScreenPos)
-{
-	return normalize(mul(float3(ScreenPos, 1), DFToFloat3x3(PrimaryView.ScreenToWorld)).xyz);
-}
-
-#define ORBIS_CLOUDS_SHELL_MARCH_STEPS 32
-
-/**
- * At distance t along RayDirection from the camera (RayOrigin is 0), returns how far that sample point
- * is from PlanetCenter — the spherical radius at that march step.
- *
- * Why not length(t * RayDirection - PlanetCenter):
- * At planet scale (~1e6 cm and up), subtracting two huge vectors loses float32 precision.
- * This uses the expanded form of |t * RayDirection - PlanetCenter|^2 instead:
- *
- * t * t — along-ray term
- * 2.0 * t * dot(RayDirection, OC) — cross term (OC = -PlanetCenter)
- * dot(OC, OC) — squared distance from camera to planet center
- *
- * Then sqrt gives radius. max(..., 0.0) avoids negative from float error.
- *
- * Used by OrbisCloudsDensityAt during the march — radius vs InnerRadius / OuterRadius sets fog density at each step.
- *
- * Needed at large planets: with camera at 0 and PlanetCenter at ~1e6–1e9 cm,
- * length(t * RayDirection - PlanetCenter) subtracts two huge, nearly parallel vectors → radius and density can wobble or band.
- * Small local clouds (km scale): plain length is usually fine.
- * Planet-sized radii in camera-relative space: keep this expanded form.
- */
-float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
-{
-	const float3 OC = -PlanetCenter;
-	return sqrt(max(t * t + 2.0 * t * dot(RayDirection, OC) + dot(OC, OC), 0.0));
-}
+#define ZENITH_MARCH_MIN_STEPS 54  // 64
+#define HORIZON_MARCH_MAX_STEPS 96 // 128
 
 // Thin bottom/top fade bands into a flat 1.0 plateau (HZD slide silhouettes).
 float ThinEdgeFade(float h, float BottomEdge, float TopEdge)
@@ -134,7 +141,7 @@ float ThinEdgeFade(float h, float Edge)
 }
 
 // Height fraction in shell: 0 at inner radius, 1 at outer radius.
-float OrbisCloudsGetHeightFraction(float Radius, float InnerRadius, float OuterRadius)
+float GetHeightFraction(float Radius, float InnerRadius, float OuterRadius)
 {
 	const float ShellThickness = OuterRadius - InnerRadius;
 	if (ShellThickness <= 0.0)
@@ -145,25 +152,25 @@ float OrbisCloudsGetHeightFraction(float Radius, float InnerRadius, float OuterR
 	return saturate((Radius - InnerRadius) / ShellThickness);
 }
 
-float OrbisCloudsHeightPresetStratus(float h)
+float HeightPresetStratus(float h)
 {
 	return ThinEdgeFade(h, 0.08);
 }
 
-float OrbisCloudsHeightPresetCumulus(float h)
+float HeightPresetCumulus(float h)
 {
 	const float hc = saturate((h - 0.25) / 0.5);
 	return ThinEdgeFade(hc, 0.1);
 }
 
-float OrbisCloudsHeightPresetCumulonimbus(float h)
+float HeightPresetCumulonimbus(float h)
 {
 	const float hc = saturate((h - 0.05) / 0.9);
 	return ThinEdgeFade(hc, 0.06, 0.12);
 }
 
 // Density at ray distance t: 0.8 at inner (bottom), 0.1 at outer (top). Zero outside the annulus.
-float OrbisCloudsDensityAt(
+float ComputeDensityAt(
 	float t,
 	float3 RayDirection,
 	float3 PlanetCenter,
@@ -186,6 +193,14 @@ float OrbisCloudsDensityAt(
 	return lerp(0.8, 0.1, HeightFromBottom);
 }
 
+// Camera-relative space: RayOrigin (camera) is 0, so outward radial "up" at the camera is normalize(-PlanetCenter).
+int FindStepCount(float3 RayDirection, float3 PlanetCenter)
+{
+	const float3 UpVector = normalize(-PlanetCenter); // planet center is input as relative to camera from SceneViewExtension
+	const float d = abs(dot(RayDirection, UpVector));
+	return (int)ceil(lerp((float)HORIZON_MARCH_MAX_STEPS, (float)ZENITH_MARCH_MIN_STEPS, d));
+}
+
 float AccumulateShellOpticalDepth(
 	float3 RayDirection,
 	float3 PlanetCenter,
@@ -200,13 +215,14 @@ float AccumulateShellOpticalDepth(
 		return 0.0;
 	}
 
-	const float StepSize = SegmentLength / ORBIS_CLOUDS_SHELL_MARCH_STEPS;
+	const int StepCount = FindStepCount(RayDirection, PlanetCenter);
+	const float StepSize = SegmentLength / StepCount;
 	float OpticalDepth = 0.0;
 
-	for (int StepIndex = 0; StepIndex < ORBIS_CLOUDS_SHELL_MARCH_STEPS; StepIndex++)
+	for (int StepIndex = 0; StepIndex < StepCount; StepIndex++)
 	{
 		const float t = tEnter + (StepIndex + 0.5) * StepSize;
-		OpticalDepth += OrbisCloudsDensityAt(t, RayDirection, PlanetCenter, InnerRadius, OuterRadius) * StepSize;
+		// OpticalDepth += ComputeDensityAt(t, RayDirection, PlanetCenter, InnerRadius, OuterRadius) * StepSize;
 	}
 
 	return OpticalDepth;

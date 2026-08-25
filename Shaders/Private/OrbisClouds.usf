@@ -25,7 +25,7 @@ uint CloudTypeNoiseType;
 int CloudsTypeOctaves;
 float CloudsTypeLacunarity;
 float CloudsTypeGain;
-uint WeatherMapChannel;
+uint CloudsViewMode;
 uint bDebugSolid;
 uint bDepthOcclusion;
 
@@ -66,9 +66,6 @@ void MainPS(
 		}
 	}
 
-	//const float c = tEnter >= 0. ? 1. : 0.;
-    //OutColor = float4(c, c, c, 1.0);
-	
 	// Project the shell entry onto the inner sphere so coverage is constant through the layer.
 	const float3 ShellEntryPosition = RayOrigin + RayDirection * tEnter;
 	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
@@ -95,6 +92,76 @@ void MainPS(
 		CloudsTypeLacunarity,
 		CloudsTypeGain);
 
-	const float DisplayedWeatherMapValue = WeatherMapChannel == 0u ? WeatherMap.x : WeatherMap.y;
-	OutColor = float4(DisplayedWeatherMapValue, DisplayedWeatherMapValue, DisplayedWeatherMapValue, 1.0);
+	float Color = 0.;
+	switch (CloudsViewMode)
+	{
+	case 0u:
+		Color = WeatherMap.x;
+		break;
+	case 1u:
+		Color = WeatherMap.y;
+		break;
+	case 2u:
+	{
+		// TEMPORARY RAYMARCH CODE------------------------------------------------------------------------
+		const float SegmentLength = tExit - tEnter;
+		if (SegmentLength <= 0.0)
+		{
+			OutColor = float4(0., 0., 0., 1.0);
+			return;
+		}
+
+		const int StepCount = FindStepCount(RayDirection, PlanetCenterRelative);
+		const float StepSize = SegmentLength / StepCount;
+		const float ShellThickness = OuterRadius - InnerRadius;
+		float OpticalDepth = 0.0;
+		float WeightedHeight = 0.0;
+
+		for (int StepIndex = 0; StepIndex < StepCount && ShellThickness > 0.0; StepIndex++)
+		{
+			const float t = tEnter + (StepIndex + 0.5) * StepSize;
+			const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
+			const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
+			if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
+			{
+				continue;
+			}
+
+			const float3 StepPosition = RayOrigin + RayDirection * t;
+			const float3 DirectionFromPlanetCenterAtStep = normalize(StepPosition - PlanetCenterRelative);
+			const float3 SamplePosition = DirectionFromPlanetCenterAtStep * InnerRadius;
+
+			const float2 Density = CalculateWeatherMap(
+				SamplePosition,
+				InnerRadius,
+				CloudCoverageNoiseScale,
+				BaseNoiseType,
+				NoiseSeed,
+				NoiseOutputMin,
+				NoiseOutputMax,
+				CloudsCoverageOctaves,
+				CloudsCoverageLacunarity,
+				CloudsCoverageGain,
+				bCloudsCoverageUseWarp != 0u,
+				CloudsCoverageWarpStrength,
+				CloudsCoverageWarpOctaves,
+				CloudTypeNoiseScale,
+				CloudTypeNoiseType,
+				CloudTypeNoiseSeed,
+				CloudsTypeOctaves,
+				CloudsTypeLacunarity,
+				CloudsTypeGain);
+
+			// OpticalDepth += StepSize * saturate(Density.x);
+			const float StepContribution = StepSize * saturate(Density.x);
+			OpticalDepth += StepContribution;
+			WeightedHeight += StepContribution * HeightFromBottom;
+		}
+		// raymarch end -------------------------------------------------------------------------------
+		const float AverageHeightFraction = OpticalDepth > 0.0 ? WeightedHeight / OpticalDepth : 0.0;
+		Color = OpticalDepth > 0.0 ? lerp(0.1, 1.0, AverageHeightFraction) : 0.0;
+	}
+	break;
+	}
+	OutColor = float4(Color, Color, Color, 1.0);
 }

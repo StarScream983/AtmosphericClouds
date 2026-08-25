@@ -21,10 +21,10 @@ static TAutoConsoleVariable<int32> CVarOrbisCloudsDepthOcclusion(
 	TEXT("1 = clip shell by scene depth (terrain occludes). 0 = shell ignores depth."),
 	ECVF_RenderThreadSafe);
 
-TAutoConsoleVariable<int32> CVarOrbisCloudsWeatherMapChannel(
-	TEXT("r.OrbisClouds.WeatherMapChannel"),
+TAutoConsoleVariable<int32> CVarOrbisCloudsViewMode(
+	TEXT("r.OrbisClouds.ViewMode"),
 	0,
-	TEXT("0 = Cloud Coverage. 1 = Cloud Type."),
+	TEXT("0 = Cloud Coverage. 1 = Cloud Type. 2 = Clouds."),
 	ECVF_RenderThreadSafe);
 
 FOrbisCloudsViewExtension::FOrbisCloudsViewExtension(const FAutoRegister& AutoRegister, UWorld* InWorld)
@@ -121,10 +121,10 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsTypeOctaves = PlanetForPass.CloudsTypeOctaves;
 	PassParameters->CloudsTypeLacunarity = PlanetForPass.CloudsTypeLacunarity;
 	PassParameters->CloudsTypeGain = PlanetForPass.CloudsTypeGain;
-	PassParameters->WeatherMapChannel = static_cast<uint32>(FMath::Clamp(
-		CVarOrbisCloudsWeatherMapChannel.GetValueOnRenderThread(),
+	PassParameters->CloudsViewMode = static_cast<uint32>(FMath::Clamp(
+		CVarOrbisCloudsViewMode.GetValueOnRenderThread(),
 		0,
-		1));
+		2));
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;

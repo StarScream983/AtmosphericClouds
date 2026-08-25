@@ -24,18 +24,18 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent *Component)
 		return;
 	}
 
-	int32 WeatherMapChannelIndex = FMath::Clamp(
-		CVarOrbisCloudsWeatherMapChannel.GetValueOnGameThread(),
+	int32 CloudsViewModeIndex = FMath::Clamp(
+		CVarOrbisCloudsViewMode.GetValueOnGameThread(),
 		0,
-		1);
-	const char *WeatherMapChannelNames[] = {"Cloud Coverage", "Cloud Type"};
+		2);
+	const char *CloudsViewModeNames[] = {"Cloud Coverage", "Cloud Type", "Clouds"};
 	if (ImGui::Combo(
-			"Displayed Weather Map",
-			&WeatherMapChannelIndex,
-			WeatherMapChannelNames,
-			UE_ARRAY_COUNT(WeatherMapChannelNames)))
+			"Clouds View Mode",
+			&CloudsViewModeIndex,
+			CloudsViewModeNames,
+			UE_ARRAY_COUNT(CloudsViewModeNames)))
 	{
-		CVarOrbisCloudsWeatherMapChannel->Set(WeatherMapChannelIndex);
+		CVarOrbisCloudsViewMode->Set(CloudsViewModeIndex);
 	}
 
 	if (!Component)
