@@ -52,7 +52,7 @@ float2 IqRaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 Sph
 	float Discriminant = B * B - C;
 	if (Discriminant < 0.0)
 	{
-		return float2(-1.0, -1.0); // no intersection
+		return float2(-1.0, -1.0);
 	}
 	Discriminant = sqrt(Discriminant);
 	return float2(max(-B - Discriminant, 0.), max(-B + Discriminant, 0.));
@@ -64,24 +64,41 @@ bool IntersectAtmosphereShell(
 	float3 PlanetCenter,
 	float InnerRadius,
 	float OuterRadius,
-	out float tEnter,
-	out float tExit)
+	out float tRaymarchEnter,
+	out float tRaymarchExit,
+	out float2 OuterRadiusHitOut)
 {
 
 	const float2 InnerHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, InnerRadius);
-	const float2 OuterHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius);
+	const float2 OuterRadiusHit = IqRaySphereIntersection(RayOrigin, RayDirection, PlanetCenter, OuterRadius);
+	OuterRadiusHitOut = OuterRadiusHit;
 
-	if (OuterHit.x >= 0. && OuterHit.y >= 0.)
+	if (OuterRadiusHit.x >= 0. && OuterRadiusHit.y >= 0.)
 	{
 		// intersected outer sphere
-		tEnter = OuterHit.x;
-		tExit = OuterHit.y;
+		tRaymarchEnter = OuterRadiusHit.x;
+		tRaymarchExit = OuterRadiusHit.y;
 
 		if (InnerHit.x >= 0. && InnerHit.y >= 0.)
 		{
 			// intersected inner sphere
-			const float MinInner = min(InnerHit.x, InnerHit.y);
-			tExit = min(tExit, MinInner);
+			const float3 OriginToCenter = RayOrigin - PlanetCenter;
+			const bool bCameraInsideInner = dot(OriginToCenter, OriginToCenter) < (InnerRadius * InnerRadius);
+
+			if (bCameraInsideInner)
+			{
+				// Camera starts below the inner radius: the near inner-sphere root is clamped to 0
+				// (behind/at the camera), so use the far root instead — where the ray exits the inner
+				// sphere into the shell — as the start of the march.
+				tRaymarchEnter = max(InnerHit.x, InnerHit.y);
+			}
+			else
+			{
+				// Camera is above the inner radius: stop the shell march at the near inner-sphere hit
+				// (the visible ground/inner surface occludes anything beyond it).
+				const float MinInner = min(InnerHit.x, InnerHit.y);
+				tRaymarchExit = min(tRaymarchExit, MinInner);
+			}
 		}
 
 		return true;
@@ -102,24 +119,24 @@ bool IntersectAtmosphereShell(
 // dot is how aligned RayDirection is with ViewForward (1 = same direction, smaller when tilted).
 // Center pixel: dot ~ 1, SceneRayDistance ~ SceneViewDepth. Corner pixel: dot < 1, SceneRayDistance > SceneViewDepth.
 //
-// ClipShellBySceneDepth compares SceneRayDistance to tEnter/tExit along RayDirection — without this, edge pixels clip fog at the wrong distance.
+// ClipShellBySceneDepth compares SceneRayDistance to tRaymarchEnter/tRaymarchExit along RayDirection — without this, edge pixels clip fog at the wrong distance.
 float SceneDepthToRayDistance(float SceneViewDepth, float3 RayDirection)
 {
 	return SceneViewDepth / max(dot(RayDirection, PrimaryView.ViewForward), 1e-5);
 }
 
-// Shorten the cloud shell march [tEnter, tExit] so terrain in the scene depth buffer occludes fog behind it.
-void ClipShellBySceneDepth(inout float tEnter, inout float tExit, float SceneRayDistance)
+// Shorten the cloud shell march [tRaymarchEnter, tRaymarchExit] so terrain in the scene depth buffer occludes fog behind it.
+void ClipShellBySceneDepth(inout float tRaymarchEnter, inout float tRaymarchExit, float SceneRayDistance)
 {
 	// Terrain is at or before the shell entry — no cloud on this pixel.
-	if (SceneRayDistance <= tEnter)
+	if (SceneRayDistance <= tRaymarchEnter)
 	{
-		tExit = tEnter;
+		tRaymarchExit = tRaymarchEnter;
 		return;
 	}
 
 	// Stop marching at the terrain surface instead of the shell exit.
-	tExit = min(tExit, SceneRayDistance);
+	tRaymarchExit = min(tRaymarchExit, SceneRayDistance);
 }
 
 // RAYMARCHING OPTICAL DEPTH, DENSITY AND CLOUD SHAPES----------------------------------------------
@@ -206,10 +223,10 @@ float AccumulateShellOpticalDepth(
 	float3 PlanetCenter,
 	float InnerRadius,
 	float OuterRadius,
-	float tEnter,
-	float tExit)
+	float tRaymarchEnter,
+	float tRaymarchExit)
 {
-	const float SegmentLength = tExit - tEnter;
+	const float SegmentLength = tRaymarchExit - tRaymarchEnter;
 	if (SegmentLength <= 0.0)
 	{
 		return 0.0;
@@ -221,7 +238,7 @@ float AccumulateShellOpticalDepth(
 
 	for (int StepIndex = 0; StepIndex < StepCount; StepIndex++)
 	{
-		const float t = tEnter + (StepIndex + 0.5) * StepSize;
+		const float t = tRaymarchEnter + (StepIndex + 0.5) * StepSize;
 		// OpticalDepth += ComputeDensityAt(t, RayDirection, PlanetCenter, InnerRadius, OuterRadius) * StepSize;
 	}
 

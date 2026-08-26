@@ -47,9 +47,10 @@ void MainPS(
 	const float3 RayOrigin = float3(0.0, 0.0, 0.0);
 	const float3 RayDirection = ReconstructWorldRayDirection(ScreenPos);
 
-	float tEnter = 0.0;
-	float tExit = 0.0;
-	if (!IntersectAtmosphereShell(RayOrigin, RayDirection, PlanetCenterRelative, InnerRadius, OuterRadius, tEnter, tExit))
+	float tRaymarchEnter = 0.0;
+	float tRaymarchExit = 0.0;
+	float2 OuterRadiusHit = 0.0; // For Coverage/Type weather map debug
+	if (!IntersectAtmosphereShell(RayOrigin, RayDirection, PlanetCenterRelative, InnerRadius, OuterRadius, tRaymarchEnter, tRaymarchExit, OuterRadiusHit))
 	{
 		discard;
 	}
@@ -58,22 +59,27 @@ void MainPS(
 	{
 		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
 		const float SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);
-		ClipShellBySceneDepth(tEnter, tExit, SceneRayDistance);
+		ClipShellBySceneDepth(tRaymarchEnter, tRaymarchExit, SceneRayDistance);
 
-		if (tExit <= tEnter)
+		if (tRaymarchExit <= tRaymarchEnter)
 		{
 			discard;
 		}
 	}
 
-	// Project the shell entry onto the inner sphere so coverage is constant through the layer.
-	const float3 ShellEntryPosition = RayOrigin + RayDirection * tEnter;
+	// Project onto the outer sphere so coverage is constant through the layer, sampled at the outer
+	// boundary regardless of whether the camera is outside the shell (orbit) or inside it (near/below
+	// the inner radius). Reuses the outer-sphere hit IntersectAtmosphereShell already computed, rather
+	// than re-intersecting it, and rather than reusing tRaymarchEnter/tRaymarchExit, which mix in inner-sphere clipping
+	// and produce a discontinuity right at the inner-sphere silhouette.
+	const float OuterShellPosition = (OuterRadiusHit.x > 0.0) ? OuterRadiusHit.x : OuterRadiusHit.y;
+	const float3 ShellEntryPosition = RayOrigin + RayDirection * OuterShellPosition;
 	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
-	const float3 InnerSurfacePosition = DirectionFromPlanetCenter * InnerRadius;
+	const float3 OuterSurfacePosition = DirectionFromPlanetCenter * OuterRadius;
 
 	const float2 WeatherMap = CalculateWeatherMap(
-		InnerSurfacePosition,
-		InnerRadius,
+		OuterSurfacePosition,
+		OuterRadius,
 		CloudCoverageNoiseScale,
 		BaseNoiseType,
 		NoiseSeed,
@@ -104,7 +110,7 @@ void MainPS(
 	case 2u:
 	{
 		// TEMPORARY RAYMARCH CODE------------------------------------------------------------------------
-		const float SegmentLength = tExit - tEnter;
+		const float SegmentLength = tRaymarchExit - tRaymarchEnter;
 		if (SegmentLength <= 0.0)
 		{
 			OutColor = float4(0., 0., 0., 1.0);
@@ -119,7 +125,7 @@ void MainPS(
 
 		for (int StepIndex = 0; StepIndex < StepCount && ShellThickness > 0.0; StepIndex++)
 		{
-			const float t = tEnter + (StepIndex + 0.5) * StepSize;
+			const float t = tRaymarchEnter + (StepIndex + 0.5) * StepSize;
 			const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
 			const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
 			if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)

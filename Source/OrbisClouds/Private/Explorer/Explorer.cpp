@@ -104,6 +104,8 @@ void AExplorer::Move(const FInputActionValue& Value)
 	AddMovementInput(ActorQuat.GetForwardVector(), MovementVector.X);
 	AddMovementInput(ActorQuat.GetRightVector(), MovementVector.Y);
 	AddMovementInput(ActorQuat.GetUpVector(), MovementVector.Z);
+
+	UE_LOG(LogTemp, Warning, TEXT("Move: %s"), *MovementVector.ToString());
 }
 
 void AExplorer::Look(const FInputActionValue& Value)
