@@ -28,6 +28,7 @@ public class OrbisClouds : ModuleRules
 				"RHI",
 				"Projects",
 				"ImGui",
+				"AssetRegistry",
 			}
 		);
 	}

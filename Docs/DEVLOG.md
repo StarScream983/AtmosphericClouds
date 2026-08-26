@@ -59,3 +59,5 @@ Range not settled:
 - `54-96` (2017 Nubis).
 
 ---
+
+## TEXTURE AUTHORING COMPONENT
