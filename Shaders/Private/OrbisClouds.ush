@@ -41,21 +41,96 @@ float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
 	return sqrt(max(t * t + 2.0 * t * dot(RayDirection, OC) + dot(OC, OC), 0.0));
 }
 
+// Precisely computes the unit direction from the planet center to a point OuterShellPosition units along
+// RayDirection from the camera (RayOrigin is always (0,0,0) in this shader) — i.e. the same hit point
+// IntersectAtmosphereShell/OuterShellPosition in MainPS already found, just re-expressed relative to the
+// planet center without precision loss. Does NOT re-derive the intersection itself (which root, near or
+// far) — it takes OuterShellPosition as already decided by the existing IntersectAtmosphereShell and only
+// fixes the position math downstream of it, so it can't disagree with that root selection.
+//
+// Was: normalize(RayDirection * OuterShellPosition - PlanetCenterRelative) — subtracts two float3 vectors
+// that are both ~CameraDistanceFromPlanetCenter in magnitude and nearly parallel whenever the camera is far
+// outside the outer radius, losing the precision needed to recover their small difference — collapsed the
+// weather-map sampling position to a near-constant value across the whole visible disc (the flat
+// white/grey "surface" bug). Fixed using UE's double-float math (FDFVector3/FDFScalar, DoubleFloat.ush)
+// for just the multiply and subtract, only demoting to plain float32 at the very end once the result's
+// magnitude is safely bounded by OuterRadius — modeled on the same technique Epic's own
+// RayPlanetIntersectPrecise (Engine/Shaders/Private/PathTracing/Volume/PathTracingAtmosphere.ush) uses for
+// the path-traced atmosphere's ray/sphere intersection.
+//
+// PlanetCenterRelativeDF is the planet center relative to the camera, constructed on the CPU from a
+// double-precision FVector via FDFVector3, so it never loses precision before this function runs.
+float3 ComputePreciseOuterSurfaceDirection(float3 RayDirection, float OuterShellPosition, FDFVector3 PlanetCenterRelativeDF)
+{
+	const FDFVector3 HitPosition = DFMultiply(RayDirection, DFPromote(OuterShellPosition));
+	const FDFVector3 DirectionOffset = DFSubtract(HitPosition, PlanetCenterRelativeDF);
+	return normalize(DFDemote(DirectionOffset));
+}
+
 // IQ sphere intersector: https://iquilezles.org/articles/intersectors/
 // Sphere of size SphereRadius centered at SphereCenter.
 // Returns (tNear, tFar). No hit → (-1, -1).
+//
+// Was: float B = dot(OriginToCenter, RayDirection); float C = dot(OriginToCenter, OriginToCenter) -
+// SphereRadius * SphereRadius; float Discriminant = B * B - C; — subtracts two independently-rounded huge
+// squared numbers directly. Fails for grazing/near-tangent rays (common whenever the camera is close to
+// the sphere, since a large fraction of screen directions become near-tangent), where the true discriminant
+// is naturally near zero and float32 rounding is enough to flip its sign — causing IntersectAtmosphereShell
+// to falsely report a miss (discard, black) for those rays even when the camera is comfortably positioned
+// to hit the sphere. Replaced with the perpendicular-distance formulation (H = component of OriginToCenter
+// perpendicular to RayDirection; Ha = R^2 - |H|^2, mathematically identical to the old Discriminant but
+// computed via a path that doesn't independently round two huge squared terms before subtracting them) plus
+// the numerically stable quadratic formula (pick Q's sign to avoid cancellation between the two roots, then
+// get the second root via the product-of-roots identity C/Q instead of the naive B +/- sqrt(Discriminant)
+// form). Same technique as Epic's own RayPlanetIntersectPrecise
+// (Engine/Shaders/Private/PathTracing/Volume/PathTracingAtmosphere.ush); this doesn't need the double-float
+// math that function also uses, since near-tangent cancellation is angle-driven, not magnitude-driven.
+// Verified by hand against a camera-outside case (D=1000, R=100, direct ray: near=900, far=1100) and a
+// camera-inside case (D=50, R=100, direct ray: near=-50 behind camera, far=150) before implementing.
 float2 IqRaySphereIntersection(float3 RayOrigin, float3 RayDirection, float3 SphereCenter, float SphereRadius)
 {
-	float3 OriginToCenter = RayOrigin - SphereCenter;
-	float B = dot(OriginToCenter, RayDirection);
-	float C = dot(OriginToCenter, OriginToCenter) - SphereRadius * SphereRadius;
-	float Discriminant = B * B - C;
-	if (Discriminant < 0.0)
+	const float3 OriginToCenter = RayOrigin - SphereCenter;
+	const float B = dot(OriginToCenter, RayDirection);
+	const float3 H = OriginToCenter - RayDirection * B;
+	const float Hd = dot(H, H);
+	float Ha = SphereRadius * SphereRadius - Hd;
+	if (Ha < 0.0)
 	{
 		return float2(-1.0, -1.0);
 	}
-	Discriminant = sqrt(Discriminant);
-	return float2(max(-B - Discriminant, 0.), max(-B + Discriminant, 0.));
+	Ha = sqrt(Ha);
+
+	float Q;
+	if (B < 0.0)
+	{
+		Q = -B + Ha;
+	}
+	else
+	{
+		Q = -B - Ha;
+	}
+	const float C = dot(OriginToCenter, OriginToCenter) - SphereRadius * SphereRadius;
+	const float T0 = Q;
+	const float T1 = C / Q;
+	const float TNear = min(T0, T1);
+	const float TFar = max(T0, T1);
+
+	// The two roots' product equals C, which depends only on the camera's distance from the sphere center
+	// and the radius — never on RayDirection. So "camera outside the sphere" (C > 0, roots share a sign)
+	// versus "camera inside" (C < 0, roots have opposite signs) is a single fact for the whole frame, not
+	// something that can vary per pixel. What DOES vary per ray is whether that shared sign is positive (ray
+	// points toward the sphere — real hit ahead) or negative (ray points away from it — sphere is entirely
+	// behind the camera in that direction, i.e. no hit at all). TFar < 0 here means the LATTER case: both
+	// roots behind the camera. Clamping that straight to (0, 0) via max(...,0.) — what this function used to
+	// do, and what the original B*B-C version also did — makes IntersectAtmosphereShell's
+	// "OuterRadiusHit.x >= 0 && OuterRadiusHit.y >= 0" check pass as a false hit at t=0, rendering a "ghost"
+	// wherever the camera's rays happen to point away from the planet, with a real gap of genuine non-hits
+	// on either side. Must return an explicit miss here instead.
+	if (TFar < 0.0)
+	{
+		return float2(-1.0, -1.0);
+	}
+	return float2(max(TNear, 0.), TFar);
 }
 
 bool IntersectAtmosphereShell(

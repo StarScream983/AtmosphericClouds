@@ -1,10 +1,13 @@
 #include "/Engine/Public/Platform.ush"
 #include "/Engine/Private/Common.ush"
 #include "/Engine/Private/InstancedStereo.ush"
+#include "/Engine/Private/DoubleFloat.ush"
 #include "/Plugin/OrbisClouds/Noise.ush"
 #include "/Plugin/OrbisClouds/OrbisClouds.ush"
 
 float3 PlanetCenterRelative;
+float3 PlanetCenterRelativeHi;
+float3 PlanetCenterRelativeLo;
 float InnerRadius;
 float OuterRadius;
 float CloudDensity;
@@ -55,7 +58,13 @@ void MainPS(
 		discard;
 	}
 
-	if (bDepthOcclusion != 0u)
+	// Only clip by terrain depth for the actual raymarch (CloudsViewMode == 2) — Coverage/Type (0/1) are a
+	// debug visualization of the weather map projected onto the outer sphere, they never read
+	// tRaymarchEnter/tRaymarchExit, so terrain occlusion has nothing to do with them. Previously this ran
+	// unconditionally and discarded Coverage/Type pixels whenever terrain was nearer than the shell (i.e.
+	// whenever the camera was near the ground looking mostly at terrain) even though those modes don't use
+	// the clipped segment at all — that was the black region reported near/below the outer radius.
+	if (bDepthOcclusion != 0u && CloudsViewMode == 2u)
 	{
 		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
 		const float SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);
@@ -73,8 +82,17 @@ void MainPS(
 	// than re-intersecting it, and rather than reusing tRaymarchEnter/tRaymarchExit, which mix in inner-sphere clipping
 	// and produce a discontinuity right at the inner-sphere silhouette.
 	const float OuterShellPosition = (OuterRadiusHit.x > 0.0) ? OuterRadiusHit.x : OuterRadiusHit.y;
-	const float3 ShellEntryPosition = RayOrigin + RayDirection * OuterShellPosition;
-	const float3 DirectionFromPlanetCenter = normalize(ShellEntryPosition - PlanetCenterRelative);
+
+	// Was: normalize(RayDirection * OuterShellPosition - PlanetCenterRelative) — subtracts two float3
+	// vectors that are both ~CameraDistanceFromPlanetCenter in magnitude and nearly parallel whenever the
+	// camera is far outside the outer radius, losing the precision needed to recover their difference (the
+	// flat white/grey "surface" bug seen from deep space). Fixed using UE's double-float math
+	// (FDFVector3/FDFScalar) instead of float32 algebra — see ComputePreciseOuterSurfaceDirection in
+	// OrbisClouds.ush, modeled on Epic's own RayPlanetIntersectPrecise for the path-traced atmosphere. It
+	// reuses OuterShellPosition as-is rather than re-deriving the intersection independently, so it can't
+	// disagree with IntersectAtmosphereShell's root selection above.
+	const FDFVector3 PlanetCenterRelativeDF = MakeDFVector3(PlanetCenterRelativeHi, PlanetCenterRelativeLo);
+	const float3 DirectionFromPlanetCenter = ComputePreciseOuterSurfaceDirection(RayDirection, OuterShellPosition, PlanetCenterRelativeDF);
 	const float3 OuterSurfacePosition = DirectionFromPlanetCenter * OuterRadius;
 
 	const float2 WeatherMap = CalculateWeatherMap(
@@ -107,6 +125,12 @@ void MainPS(
 	case 1u:
 		Color = WeatherMap.y;
 		break;
+	case 3u:
+		// TEMPORARY DEBUG: red = near root used (OuterRadiusHit.x > 0, camera outside), blue = far root used
+		// (camera inside) — checking whether root selection flips somewhere across the screen, which would
+		// explain a seam between correctly-textured and "ghost" flat regions.
+		OutColor = (OuterRadiusHit.x > 0.0) ? float4(1., 0., 0., 1.) : float4(0., 0., 1., 1.);
+		return;
 	case 2u:
 	{
 		// TEMPORARY RAYMARCH CODE------------------------------------------------------------------------

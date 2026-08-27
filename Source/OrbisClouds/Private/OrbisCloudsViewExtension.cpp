@@ -4,6 +4,7 @@
 #include "OrbisCloudsShader.h"
 #include "OrbisCloudsSubsystem.h"
 #include "FXRenderingUtils.h"
+#include "Math/DoubleFloat.h"
 #include "PostProcess/PostProcessInputs.h"
 #include "RHIStaticStates.h"
 #include "SceneView.h"
@@ -99,8 +100,16 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	const FVector ViewOrigin = View.ViewMatrices.GetViewOrigin();
 	const FVector PlanetCenterRelative = PlanetForPass.PlanetCenter - ViewOrigin;
 
+	// Double-float (High/Low) split of the same value, built directly from the double-precision FVector so
+	// no precision is lost before it reaches the shader. Feeds ComputePreciseOuterSurfaceDirection in
+	// OrbisClouds.ush — see the comment there for why the plain PlanetCenterRelative above isn't enough for
+	// that specific computation.
+	const FDFVector3 PlanetCenterRelativeDF(PlanetCenterRelative);
+
 	FOrbisCloudsPS::FParameters* PassParameters = GraphBuilder.AllocParameters<FOrbisCloudsPS::FParameters>();
 	PassParameters->PlanetCenterRelative = FVector3f(PlanetCenterRelative);
+	PassParameters->PlanetCenterRelativeHi = PlanetCenterRelativeDF.High;
+	PassParameters->PlanetCenterRelativeLo = PlanetCenterRelativeDF.Low;
 	PassParameters->InnerRadius = PlanetForPass.CloudInnerRadius;
 	PassParameters->OuterRadius = PlanetForPass.CloudOuterRadius;
 	PassParameters->CloudDensity = PlanetForPass.CloudDensity;
@@ -124,7 +133,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsViewMode = static_cast<uint32>(FMath::Clamp(
 		CVarOrbisCloudsViewMode.GetValueOnRenderThread(),
 		0,
-		2));
+		3));
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;

@@ -11,6 +11,8 @@ public:
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 		SHADER_PARAMETER(FVector3f, PlanetCenterRelative)
+		SHADER_PARAMETER(FVector3f, PlanetCenterRelativeHi)
+		SHADER_PARAMETER(FVector3f, PlanetCenterRelativeLo)
 		SHADER_PARAMETER(float, InnerRadius)
 		SHADER_PARAMETER(float, OuterRadius)
 		SHADER_PARAMETER(float, CloudDensity)
