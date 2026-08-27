@@ -41,28 +41,30 @@ float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
 	return sqrt(max(t * t + 2.0 * t * dot(RayDirection, OC) + dot(OC, OC), 0.0));
 }
 
-// Precisely computes the unit direction from the planet center to a point OuterShellPosition units along
-// RayDirection from the camera (RayOrigin is always (0,0,0) in this shader) — i.e. the same hit point
-// IntersectAtmosphereShell/OuterShellPosition in MainPS already found, just re-expressed relative to the
-// planet center without precision loss. Does NOT re-derive the intersection itself (which root, near or
-// far) — it takes OuterShellPosition as already decided by the existing IntersectAtmosphereShell and only
-// fixes the position math downstream of it, so it can't disagree with that root selection.
+// Precisely computes the unit direction from the planet center to a point t units along RayDirection from
+// the camera (RayOrigin is always (0,0,0) in this shader) — used both for the outer-shell hit point
+// (t = OuterShellPosition in MainPS's Coverage/Type projection) and for individual raymarch step positions
+// (t = the per-step ray distance in the Clouds raymarch loop). Doesn't re-derive where t comes from at all
+// — whoever calls this has already decided t (via IntersectAtmosphereShell for the shell hit, or the
+// raymarch's own step loop), so this can't disagree with that.
 //
-// Was: normalize(RayDirection * OuterShellPosition - PlanetCenterRelative) — subtracts two float3 vectors
-// that are both ~CameraDistanceFromPlanetCenter in magnitude and nearly parallel whenever the camera is far
-// outside the outer radius, losing the precision needed to recover their small difference — collapsed the
-// weather-map sampling position to a near-constant value across the whole visible disc (the flat
-// white/grey "surface" bug). Fixed using UE's double-float math (FDFVector3/FDFScalar, DoubleFloat.ush)
-// for just the multiply and subtract, only demoting to plain float32 at the very end once the result's
-// magnitude is safely bounded by OuterRadius — modeled on the same technique Epic's own
-// RayPlanetIntersectPrecise (Engine/Shaders/Private/PathTracing/Volume/PathTracingAtmosphere.ush) uses for
-// the path-traced atmosphere's ray/sphere intersection.
+// Was: normalize(RayDirection * t - PlanetCenterRelative) — subtracts two float3 vectors that are both
+// ~CameraDistanceFromPlanetCenter in magnitude and nearly parallel whenever the camera is far from the
+// planet, losing the precision needed to recover their small difference. For the outer-shell case this
+// collapsed the weather-map sampling position to a near-constant value across the whole visible disc from
+// deep space (the flat white/grey "surface" bug); the raymarch loop has the identical pattern and the same
+// exposure whenever the camera is far from the planet. Fixed using UE's double-float math
+// (FDFVector3/FDFScalar, DoubleFloat.ush) for just the multiply and subtract, only demoting to plain
+// float32 at the very end once the result's magnitude is safely bounded by the sphere radius involved —
+// modeled on the same technique Epic's own RayPlanetIntersectPrecise
+// (Engine/Shaders/Private/PathTracing/Volume/PathTracingAtmosphere.ush) uses for the path-traced
+// atmosphere's ray/sphere intersection.
 //
 // PlanetCenterRelativeDF is the planet center relative to the camera, constructed on the CPU from a
 // double-precision FVector via FDFVector3, so it never loses precision before this function runs.
-float3 ComputePreciseOuterSurfaceDirection(float3 RayDirection, float OuterShellPosition, FDFVector3 PlanetCenterRelativeDF)
+float3 ComputePreciseDirectionFromPlanetCenter(float3 RayDirection, float t, FDFVector3 PlanetCenterRelativeDF)
 {
-	const FDFVector3 HitPosition = DFMultiply(RayDirection, DFPromote(OuterShellPosition));
+	const FDFVector3 HitPosition = DFMultiply(RayDirection, DFPromote(t));
 	const FDFVector3 DirectionOffset = DFSubtract(HitPosition, PlanetCenterRelativeDF);
 	return normalize(DFDemote(DirectionOffset));
 }

@@ -92,7 +92,7 @@ void MainPS(
 	// reuses OuterShellPosition as-is rather than re-deriving the intersection independently, so it can't
 	// disagree with IntersectAtmosphereShell's root selection above.
 	const FDFVector3 PlanetCenterRelativeDF = MakeDFVector3(PlanetCenterRelativeHi, PlanetCenterRelativeLo);
-	const float3 DirectionFromPlanetCenter = ComputePreciseOuterSurfaceDirection(RayDirection, OuterShellPosition, PlanetCenterRelativeDF);
+	const float3 DirectionFromPlanetCenter = ComputePreciseDirectionFromPlanetCenter(RayDirection, OuterShellPosition, PlanetCenterRelativeDF);
 	const float3 OuterSurfacePosition = DirectionFromPlanetCenter * OuterRadius;
 
 	const float2 WeatherMap = CalculateWeatherMap(
@@ -157,8 +157,10 @@ void MainPS(
 				continue;
 			}
 
-			const float3 StepPosition = RayOrigin + RayDirection * t;
-			const float3 DirectionFromPlanetCenterAtStep = normalize(StepPosition - PlanetCenterRelative);
+			// Was: normalize(RayOrigin + RayDirection * t - PlanetCenterRelative) — same precision loss as
+			// the outer-shell case above (see ComputePreciseDirectionFromPlanetCenter in OrbisClouds.ush)
+			// whenever the camera is far from the planet.
+			const float3 DirectionFromPlanetCenterAtStep = ComputePreciseDirectionFromPlanetCenter(RayDirection, t, PlanetCenterRelativeDF);
 			const float3 SamplePosition = DirectionFromPlanetCenterAtStep * InnerRadius;
 
 			const float2 Density = CalculateWeatherMap(
