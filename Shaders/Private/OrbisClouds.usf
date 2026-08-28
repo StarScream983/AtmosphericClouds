@@ -52,7 +52,7 @@ void MainPS(
 
 	float tRaymarchEnter = 0.0;
 	float tRaymarchExit = 0.0;
-	float2 OuterRadiusHit = 0.0; // For Coverage/Type weather map debug
+	float2 OuterRadiusHit = 0.0; // For Coverage/Type weather map view
 	if (!IntersectAtmosphereShell(RayOrigin, RayDirection, PlanetCenterRelative, InnerRadius, OuterRadius, tRaymarchEnter, tRaymarchExit, OuterRadiusHit))
 	{
 		discard;
@@ -64,7 +64,7 @@ void MainPS(
 	// unconditionally and discarded Coverage/Type pixels whenever terrain was nearer than the shell (i.e.
 	// whenever the camera was near the ground looking mostly at terrain) even though those modes don't use
 	// the clipped segment at all — that was the black region reported near/below the outer radius.
-	if (bDepthOcclusion != 0u && CloudsViewMode == 2u)
+	if (bDepthOcclusion != 0u) // && CloudsViewMode == 2u
 	{
 		const float SceneViewDepth = ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepthTexture, SceneDepthSampler, UV, 0).r);
 		const float SceneRayDistance = SceneDepthToRayDistance(SceneViewDepth, RayDirection);

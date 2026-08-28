@@ -64,9 +64,9 @@ float SampleRadiusAlongRay(float t, float3 RayDirection, float3 PlanetCenter)
 // double-precision FVector via FDFVector3, so it never loses precision before this function runs.
 float3 ComputePreciseDirectionFromPlanetCenter(float3 RayDirection, float t, FDFVector3 PlanetCenterRelativeDF)
 {
-	const FDFVector3 HitPosition = DFMultiply(RayDirection, DFPromote(t));
-	const FDFVector3 DirectionOffset = DFSubtract(HitPosition, PlanetCenterRelativeDF);
-	return normalize(DFDemote(DirectionOffset));
+	const FDFVector3 PositionRelativeToCamera = DFMultiply(RayDirection, DFPromote(t));
+	const FDFVector3 PositionRelativeToPlanetCenter = DFSubtract(PositionRelativeToCamera, PlanetCenterRelativeDF);
+	return normalize(DFDemote(PositionRelativeToPlanetCenter));
 }
 
 // IQ sphere intersector: https://iquilezles.org/articles/intersectors/
