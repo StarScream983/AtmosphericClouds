@@ -35,6 +35,13 @@ uint bDepthOcclusion;
 Texture2D SceneDepthTexture;
 SamplerState SceneDepthSampler;
 
+Texture3D BaseShapeNoiseTexture;
+SamplerState BaseShapeNoiseSampler;
+Texture3D DetailNoiseTexture;
+SamplerState DetailNoiseSampler;
+uint bHasBaseShapeNoiseTexture;
+uint bHasDetailNoiseTexture;
+
 void MainPS(
 	in noperspective float4 UVAndScreenPos : TEXCOORD0,
 	out float4 OutColor : SV_Target0)

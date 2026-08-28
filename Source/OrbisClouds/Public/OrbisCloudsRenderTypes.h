@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "RHIResources.h"
 
 namespace OrbisCloudsPlanetPresets
 {
@@ -39,4 +40,10 @@ struct FOrbisCloudsPlanetRenderData
 	int32 CloudsTypeOctaves = 8;
 	float CloudsTypeLacunarity = 2.f;
 	float CloudsTypeGain = 0.5f;
+
+	// RHI refs, not raw UTexture pointers — safe to read on the render thread. Extracted from
+	// UOrbisCloudsComponent's BaseShapeNoiseTexture/DetailNoiseTexture on the game thread in
+	// BuildPlanetRenderData. Null if no texture is assigned.
+	FTextureRHIRef BaseShapeNoiseTextureRHI;
+	FTextureRHIRef DetailNoiseTextureRHI;
 };

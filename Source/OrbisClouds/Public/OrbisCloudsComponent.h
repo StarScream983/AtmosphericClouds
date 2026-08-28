@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "OrbisCloudsRenderTypes.h"
 #include "Components/SceneComponent.h"
+#include "Engine/VolumeTexture.h"
 #include "OrbisCloudsComponent.generated.h"
 
 UENUM(BlueprintType)
@@ -83,6 +84,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "0.1", ClampMax = "0.9"))
 	float CloudsTypeGain = 0.5f;
+
+	// Swappable authored noise volumes (from TextureAuthoringComponent) for testing against the procedural
+	// noise. Either can be left unset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Authored Textures")
+	TObjectPtr<UVolumeTexture> BaseShapeNoiseTexture = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Authored Textures")
+	TObjectPtr<UVolumeTexture> DetailNoiseTexture = nullptr;
 
 	FOrbisCloudsPlanetRenderData BuildPlanetRenderData() const;
 	void NotifyChanged();

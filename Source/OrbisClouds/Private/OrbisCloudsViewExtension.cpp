@@ -6,9 +6,11 @@
 #include "FXRenderingUtils.h"
 #include "Math/DoubleFloat.h"
 #include "PostProcess/PostProcessInputs.h"
+#include "RenderGraphUtils.h"
 #include "RHIStaticStates.h"
 #include "SceneView.h"
 #include "ScreenPass.h"
+#include "SystemTextures.h"
 
 static TAutoConsoleVariable<int32> CVarOrbisCloudsDebugSolid(
 	TEXT("r.OrbisClouds.DebugSolid"),
@@ -25,15 +27,15 @@ static TAutoConsoleVariable<int32> CVarOrbisCloudsDepthOcclusion(
 TAutoConsoleVariable<int32> CVarOrbisCloudsViewMode(
 	TEXT("r.OrbisClouds.ViewMode"),
 	0,
-	TEXT("0 = Cloud Coverage. 1 = Cloud Type. 2 = Clouds."),
+	TEXT("0 = Cloud Coverage. 1 = Cloud Type. 2 = Clouds. 3 = DEBUG: near/far root used."),
 	ECVF_RenderThreadSafe);
 
-FOrbisCloudsViewExtension::FOrbisCloudsViewExtension(const FAutoRegister& AutoRegister, UWorld* InWorld)
+FOrbisCloudsViewExtension::FOrbisCloudsViewExtension(const FAutoRegister &AutoRegister, UWorld *InWorld)
 	: FWorldSceneViewExtension(AutoRegister, InWorld)
 {
 }
 
-void FOrbisCloudsViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFamily)
+void FOrbisCloudsViewExtension::BeginRenderViewFamily(FSceneViewFamily &InViewFamily)
 {
 	if (InViewFamily.FrameNumber != CachedFrameNumber)
 	{
@@ -41,9 +43,9 @@ void FOrbisCloudsViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFa
 		CachedFrameNumber = InViewFamily.FrameNumber;
 	}
 
-	if (const FSceneInterface* Scene = InViewFamily.Scene)
+	if (const FSceneInterface *Scene = InViewFamily.Scene)
 	{
-		if (UWorld* ViewWorld = Scene->GetWorld())
+		if (UWorld *ViewWorld = Scene->GetWorld())
 		{
 			bHasCachedPlanet = UOrbisCloudsSubsystem::FindPlanetRenderData(ViewWorld, CachedPlanet);
 		}
@@ -51,9 +53,9 @@ void FOrbisCloudsViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFa
 }
 
 void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
-	FRDGBuilder& GraphBuilder,
-	const FSceneView& View,
-	const FPostProcessingInputs& Inputs)
+	FRDGBuilder &GraphBuilder,
+	const FSceneView &View,
+	const FPostProcessingInputs &Inputs)
 {
 	const bool bDebugSolid = CVarOrbisCloudsDebugSolid.GetValueOnRenderThread() != 0;
 	const bool bDepthOcclusion = CVarOrbisCloudsDepthOcclusion.GetValueOnRenderThread() != 0;
@@ -87,7 +89,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 		return;
 	}
 
-	FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(View.GetFeatureLevel());
+	FGlobalShaderMap *GlobalShaderMap = GetGlobalShaderMap(View.GetFeatureLevel());
 	TShaderMapRef<FOrbisCloudsPS> PixelShader(GlobalShaderMap);
 	if (!PixelShader.IsValid())
 	{
@@ -106,7 +108,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	// that specific computation.
 	const FDFVector3 PlanetCenterRelativeDF(PlanetCenterRelative);
 
-	FOrbisCloudsPS::FParameters* PassParameters = GraphBuilder.AllocParameters<FOrbisCloudsPS::FParameters>();
+	FOrbisCloudsPS::FParameters *PassParameters = GraphBuilder.AllocParameters<FOrbisCloudsPS::FParameters>();
 	PassParameters->PlanetCenterRelative = FVector3f(PlanetCenterRelative);
 	PassParameters->PlanetCenterRelativeHi = PlanetCenterRelativeDF.High;
 	PassParameters->PlanetCenterRelativeLo = PlanetCenterRelativeDF.Low;
@@ -133,17 +135,33 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsViewMode = static_cast<uint32>(FMath::Clamp(
 		CVarOrbisCloudsViewMode.GetValueOnRenderThread(),
 		0,
-		3));
+		4));
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;
 	PassParameters->SceneDepthSampler = TStaticSamplerState<SF_Point>::GetRHI();
+
+	// SHADER_PARAMETER_RDG_TEXTURE always needs something bound, so fall back to a 1x1 black volume when
+	// the component doesn't have a texture assigned — bHasBaseShapeNoiseTexture/bHasDetailNoiseTexture tell
+	// the shader whether what's bound is real or just the dummy.
+	PassParameters->bHasBaseShapeNoiseTexture = PlanetForPass.BaseShapeNoiseTextureRHI.IsValid() ? 1u : 0u;
+	PassParameters->BaseShapeNoiseTexture = PlanetForPass.BaseShapeNoiseTextureRHI.IsValid()
+												? RegisterExternalTexture(GraphBuilder, PlanetForPass.BaseShapeNoiseTextureRHI, TEXT("OrbisClouds.BaseShapeNoise"))
+												: GSystemTextures.GetVolumetricBlackDummy(GraphBuilder);
+	PassParameters->BaseShapeNoiseSampler = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+
+	PassParameters->bHasDetailNoiseTexture = PlanetForPass.DetailNoiseTextureRHI.IsValid() ? 1u : 0u;
+	PassParameters->DetailNoiseTexture = PlanetForPass.DetailNoiseTextureRHI.IsValid()
+											 ? RegisterExternalTexture(GraphBuilder, PlanetForPass.DetailNoiseTextureRHI, TEXT("OrbisClouds.DetailNoise"))
+											 : GSystemTextures.GetVolumetricBlackDummy(GraphBuilder);
+	PassParameters->DetailNoiseSampler = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+
 	PassParameters->View = View.ViewUniformBuffer;
 	PassParameters->RenderTargets[0] = Output.GetRenderTargetBinding();
 
 	TShaderMapRef<FScreenPassVS> VertexShader(GlobalShaderMap);
-	FRHIBlendState* AlphaBlendState = FScreenPassPipelineState::FDefaultBlendState::GetRHI();
-	FRHIDepthStencilState* DepthStencilState = FScreenPassPipelineState::FDefaultDepthStencilState::GetRHI();
+	FRHIBlendState *AlphaBlendState = FScreenPassPipelineState::FDefaultBlendState::GetRHI();
+	FRHIDepthStencilState *DepthStencilState = FScreenPassPipelineState::FDefaultDepthStencilState::GetRHI();
 
 	AddDrawScreenPass(
 		GraphBuilder,
