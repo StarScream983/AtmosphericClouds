@@ -1,4 +1,4 @@
-//
+// https://www.shadertoy.com/view/Xttcz2
 // Volumetric Clouds Experiment
 //
 // _  
@@ -392,7 +392,7 @@ float illuminate_volume(
 \_in(vec3) L
 );
 
-void integrate_volume(
+void integrate*volume(
 \_inout(volume_sampler_t) vol,
 \_in(vec3) V,
 \_in(vec3) L,
@@ -400,21 +400,21 @@ void integrate_volume(
 \_in(float) dt
 ){
 // change in transmittance (follows Beer-Lambert law)
-float T_i = exp(-vol.coeff_absorb _ density _ dt);
+float T_i = exp(-vol.coeff_absorb * density _ dt);
 // Update accumulated transmittance
-vol.T _= T_i;
+vol.T _= T*i;
 // integrate output radiance (here essentially color)
-vol.C += vol.T _ illuminate_volume(vol, V, L) _ density _ dt;
+vol.C += vol.T * illuminate*volume(vol, V, L) * density \_ dt;
 // accumulate opacity
 vol.alpha += (1. - T_i) \* (1. - vol.alpha);
 }
 
-#define cld_march_steps (50)
+#define cld*march_steps (50)
 #define cld_coverage (.3125)
 #define cld_thick (90.)
 #define cld_absorb_coeff (1.)
 #define cld_wind_dir vec3(0, 0, -u_time * .2)
-#define cld_sun_dir normalize(vec3(0, 0/*abs(sin(u_time _ .3))_/, -1))
+#define cld_sun_dir normalize(vec3(0, 0/*abs(sin(u_time * .3))\_/, -1))
 \_mutable(float) coverage_map;
 
 // ----------------------------------------------------------------------------
@@ -556,7 +556,7 @@ dot(p2,x2), dot(p3,x3) ) );
 // depends on custom basis function
 // ----------------------------------------------------------------------------
 
-#define DECL_FBM_FUNC(\_name, \_octaves, \_basis) float \_name(\_in(vec3) pos, \_in(float) lacunarity, \_in(float) init_gain, \_in(float) gain) { vec3 p = pos; float H = init_gain; float t = 0.; for (int i = 0; i < \_octaves; i++) { t += \_basis _ H; p _= lacunarity; H \*= gain; } return t; }
+#define DECL*FBM_FUNC(\_name, \_octaves, \_basis) float \_name(\_in(vec3) pos, \_in(float) lacunarity, \_in(float) init_gain, \_in(float) gain) { vec3 p = pos; float H = init_gain; float t = 0.; for (int i = 0; i < \_octaves; i++) { t += \_basis * H; p \_= lacunarity; H \*= gain; } return t; }
 
 DECL_FBM_FUNC(fbm, 4, noise(p))
 DECL_FBM_FUNC(fbm_clouds, 5, abs(noise(p)))
@@ -575,12 +575,12 @@ float sun_amount = max(dot(eye_dir, cld_sun_dir), 0.);
 
 }
 
-float density_func(
+float density*func(
 \_in(vec3) pos,
 \_in(float) h
 ){
-vec3 p = pos _ .001 + cld_wind_dir;
-float dens = fbm_clouds(p _ 2.032, 2.6434, .5, .5);
+vec3 p = pos * .001 + cld*wind_dir;
+float dens = fbm_clouds(p * 2.032, 2.6434, .5, .5);
 dens \*= smoothstep (cld_coverage, cld_coverage + .035, dens);
 
     //dens *= band(.2, .3, .5 + coverage_map * .5, h);
@@ -687,10 +687,10 @@ vec2 aspect_ratio = vec2(u_res.x / u_res.y, 1);
     vec2 point_ndc = fragCoord.xy / u_res.xy;
 
 #ifdef HLSL
-point_ndc.y = 1. - point_ndc.y;
+point*ndc.y = 1. - point_ndc.y;
 #endif
 vec3 point_cam = vec3(
-(2.0 _ point_ndc - 1.0) _ aspect_ratio \* FOV,
+(2.0 * point*ndc - 1.0) * aspect_ratio \* FOV,
 -1.0);
 
     ray_t ray = get_primary_ray(point_cam, eye, look_at);

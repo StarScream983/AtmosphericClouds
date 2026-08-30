@@ -66,7 +66,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	if (!bShouldDraw && bDebugSolid)
 	{
 		PlanetForPass.PlanetCenter = FVector::ZeroVector;
-		PlanetForPass.CloudInnerRadius = 520000000.f;
+		PlanetForPass.CloudInnerRadius = 590000000.f;
 		PlanetForPass.CloudOuterRadius = 600000000.f;
 		bShouldDraw = true;
 	}
@@ -135,7 +135,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsViewMode = static_cast<uint32>(FMath::Clamp(
 		CVarOrbisCloudsViewMode.GetValueOnRenderThread(),
 		0,
-		4));
+		5));
 	PassParameters->bDebugSolid = bDebugSolid ? 1u : 0u;
 	PassParameters->bDepthOcclusion = bDepthOcclusion ? 1u : 0u;
 	PassParameters->SceneDepthTexture = (*Inputs.SceneTextures)->SceneDepthTexture;

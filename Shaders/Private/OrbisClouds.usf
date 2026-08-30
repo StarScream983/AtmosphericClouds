@@ -42,6 +42,58 @@ SamplerState DetailNoiseSampler;
 uint bHasBaseShapeNoiseTexture;
 uint bHasDetailNoiseTexture;
 
+// Standard remap: rescales Value from the [OldMin, OldMax] range to [NewMin, NewMax], clamped.
+float Remap(float Value, float OldMin, float OldMax, float NewMin, float NewMax)
+{
+	return NewMin + saturate((Value - OldMin) / (OldMax - OldMin)) * (NewMax - NewMin);
+}
+
+// cloudTest equivalent (Project-Marshmallow compute-clouds.comp:231-253, verified verbatim against source
+// before implementing — see comment on Remap's caller below for the exact original). densityNoise there is
+// our BaseShapeNoiseTexture (4-channel: R = base shape, GBA = Worley erosion octaves at increasing
+// frequency). Coverage is NOT a flat multiplier on the final density — it's the threshold used inside a
+// second remap on the erosion/fbm channels, which is what actually carves the shape.
+// Defined here (not in OrbisClouds.ush) so it can reference BaseShapeNoiseTexture/BaseShapeNoiseSampler
+// directly as globals — OrbisClouds.ush is #included above the texture global declarations, so a function
+// living there can't see them without passing them in as parameters every call.
+float ComputeDensityAt(
+	float3 SamplePosition,
+	float InnerRadius,
+	float2 WeatherMap,
+	float HeightFromBottom,
+	float HeightGradient)
+{
+	if (bHasBaseShapeNoiseTexture == 0u)
+	{
+		// No authored base-shape texture assigned — fall back to the plain height profile so this doesn't
+		// just go silent.
+		return lerp(0.8, 0.1, HeightGradient);
+	}
+
+	const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
+	const float BaseShapeFrequency = CloudCoverageNoiseScale / PlanetDiameter;
+	const float4 BaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, SamplePosition * BaseShapeFrequency);
+
+	// calculate HeightSignal — verified from the purchased VolumetricClouds plugin's M_VolumetricClouds.uasset
+	// (Content/Materials), structurally the same technique as HZD's own height-gradient: two remaps
+	// multiplied together, using a continuous per-pixel height-ceiling scalar (their WeatherMap.b, our
+	// WeatherMap.y) instead of blending between discrete Stratus/Cumulus/Cumulonimbus preset functions.
+	// Was (verbatim):
+	//   float ShapeAltering = saturate(Remap(HeightGradient, 0, 0.07, 0, 1))
+	//                       * saturate(Remap(HeightGradient, WeatherMap.b * 0.2, WeatherMap.b, 1, 0));
+	const float CloudTypeHeight = WeatherMap.y;
+	const float HeightSignal = saturate(Remap(HeightGradient, 0.0, 0.07, 0.0, 1.0)) * saturate(Remap(HeightGradient, CloudTypeHeight * 0.2, CloudTypeHeight, 1.0, 0.0));
+
+	// multiply by low detail 3d texture, then setRange
+	float Density = Remap(BaseShapeNoise.x * HeightSignal, 0.3, 1.0, 0.0, 1.0);
+
+	// multiply by coverage and height gradient
+	const float Coverage = WeatherMap.x;
+	Density *= Coverage * (1. - HeightGradient);
+
+	return Density;
+}
+
 void MainPS(
 	in noperspective float4 UVAndScreenPos : TEXCOORD0,
 	out float4 OutColor : SV_Target0)
@@ -101,46 +153,88 @@ void MainPS(
 	const FDFVector3 PlanetCenterRelativeDF = MakeDFVector3(PlanetCenterRelativeHi, PlanetCenterRelativeLo);
 	const float3 DirectionFromPlanetCenter = ComputePreciseDirectionFromPlanetCenter(RayDirection, OuterShellPosition, PlanetCenterRelativeDF);
 	const float3 OuterSurfacePosition = DirectionFromPlanetCenter * OuterRadius;
-
-	const float2 WeatherMap = CalculateWeatherMap(
-		OuterSurfacePosition,
-		OuterRadius,
-		CloudCoverageNoiseScale,
-		BaseNoiseType,
-		NoiseSeed,
-		NoiseOutputMin,
-		NoiseOutputMax,
-		CloudsCoverageOctaves,
-		CloudsCoverageLacunarity,
-		CloudsCoverageGain,
-		bCloudsCoverageUseWarp != 0u,
-		CloudsCoverageWarpStrength,
-		CloudsCoverageWarpOctaves,
-		CloudTypeNoiseScale,
-		CloudTypeNoiseType,
-		CloudTypeNoiseSeed,
-		CloudsTypeOctaves,
-		CloudsTypeLacunarity,
-		CloudsTypeGain);
+	float2 WeatherMap = 0.;
 
 	float Color = 0.;
 	switch (CloudsViewMode)
 	{
 	case 0u:
+	{
+		WeatherMap = CalculateWeatherMap(
+			OuterSurfacePosition,
+			OuterRadius,
+			CloudCoverageNoiseScale,
+			BaseNoiseType,
+			NoiseSeed,
+			NoiseOutputMin,
+			NoiseOutputMax,
+			CloudsCoverageOctaves,
+			CloudsCoverageLacunarity,
+			CloudsCoverageGain,
+			bCloudsCoverageUseWarp != 0u,
+			CloudsCoverageWarpStrength,
+			CloudsCoverageWarpOctaves,
+			CloudTypeNoiseScale,
+			CloudTypeNoiseType,
+			CloudTypeNoiseSeed,
+			CloudsTypeOctaves,
+			CloudsTypeLacunarity,
+			CloudsTypeGain);
 		Color = WeatherMap.x;
-		break;
+	}
+	break;
 	case 1u:
+	{
+		WeatherMap = CalculateWeatherMap(
+			OuterSurfacePosition,
+			OuterRadius,
+			CloudCoverageNoiseScale,
+			BaseNoiseType,
+			NoiseSeed,
+			NoiseOutputMin,
+			NoiseOutputMax,
+			CloudsCoverageOctaves,
+			CloudsCoverageLacunarity,
+			CloudsCoverageGain,
+			bCloudsCoverageUseWarp != 0u,
+			CloudsCoverageWarpStrength,
+			CloudsCoverageWarpOctaves,
+			CloudTypeNoiseScale,
+			CloudTypeNoiseType,
+			CloudTypeNoiseSeed,
+			CloudsTypeOctaves,
+			CloudsTypeLacunarity,
+			CloudsTypeGain);
 		Color = WeatherMap.y;
-		break;
+	}
+	break;
 	case 3u:
 		// TEMPORARY DEBUG: red = near root used (OuterRadiusHit.x > 0, camera outside), blue = far root used
 		// (camera inside) — checking whether root selection flips somewhere across the screen, which would
 		// explain a seam between correctly-textured and "ghost" flat regions.
 		OutColor = (OuterRadiusHit.x > 0.0) ? float4(1., 0., 0., 1.) : float4(0., 0., 1., 1.);
 		return;
+	case 4u:
+		// TEMPORARY DEBUG: green = bHasBaseShapeNoiseTexture is 1 (texture actually seen by the shader), red
+		// = 0 (texture not seen, even though it's assigned in the editor) — isolating whether the fallback
+		// density path is running because the texture genuinely isn't reaching the shader, vs some other bug
+		// in ComputeDensityAt itself once the texture is confirmed bound.
+		OutColor = (bHasBaseShapeNoiseTexture != 0u) ? float4(0., 1., 0., 1.) : float4(1., 0., 0., 1.);
+		return;
+	case 5u:
+	{
+		// TEMPORARY DEBUG: raw BaseShapeNoise.x sampled on the outer sphere, no Remap/Coverage/Erosion
+		// applied at all — isolating whether the moiré/parallel-line pattern seen in Clouds mode comes from
+		// the texture sample itself (aliasing) or from the density math built on top of it.
+		const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
+		const float BaseShapeFrequency = CloudCoverageNoiseScale / PlanetDiameter;
+		const float4 RawBaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, OuterSurfacePosition * BaseShapeFrequency);
+		OutColor = float4(RawBaseShapeNoise.xxx, 1.0);
+		return;
+	}
 	case 2u:
 	{
-		// TEMPORARY RAYMARCH CODE------------------------------------------------------------------------
+		// RAYMARCH CODE------------------------------------------------------------------------
 		const float SegmentLength = tRaymarchExit - tRaymarchEnter;
 		if (SegmentLength <= 0.0)
 		{
@@ -149,17 +243,33 @@ void MainPS(
 		}
 
 		const int StepCount = FindStepCount(RayDirection, PlanetCenterRelative);
-		const float StepSize = SegmentLength / StepCount;
+		float StepSize = SegmentLength / StepCount;
 		const float ShellThickness = OuterRadius - InnerRadius;
 		float OpticalDepth = 0.0;
 		float WeightedHeight = 0.0;
 
-		for (int StepIndex = 0; StepIndex < StepCount && ShellThickness > 0.0; StepIndex++)
+		// Iteration is a plain integer safety net, independent of t: for near-tangent rays SegmentLength (and
+		// so StepSize) can be tiny, and if t is large enough that t + StepSize rounds back to t in float32,
+		// t never advances and "t < tRaymarchExit" alone would loop forever (GPU hang / driver crash).
+		// Iteration always increases by exactly 1 regardless of what t does, so it guarantees the loop ends.
+		int Iteration = 0;
+		const int MaxIterations = StepCount;
+
+		// Adaptive raymarch state (Marshmallow's mechanism): bZeroDensityHit is true while coarse-stepping
+		// (no density found yet), false once a hit switches us to fine-stepping. ZeroDensityHitCount counts
+		// consecutive zero-density samples during fine-stepping, used to revert back to coarse once we've
+		// walked out of the cloud. Not used by the loop yet — this is just the state declaration, the
+		// switching logic comes next.
+		bool bZeroDensityHit = true;
+		int ZeroDensityHitCount = 0;
+
+		for (float t = tRaymarchEnter; t < tRaymarchExit && ShellThickness > 0.0 && Iteration < MaxIterations; t += StepSize, Iteration++)
 		{
-			const float t = tRaymarchEnter + (StepIndex + 0.5) * StepSize;
+			const float tHalf = tRaymarchEnter + 0.5 * StepSize;
 			const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
-			const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
-			if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
+			const float HeightFromBottom = (Radius - InnerRadius);
+			const float HeightGradient = HeightFromBottom / ShellThickness;
+			if (HeightGradient < 0.0 || HeightGradient > 1.0)
 			{
 				continue;
 			}
@@ -170,9 +280,9 @@ void MainPS(
 			const float3 DirectionFromPlanetCenterAtStep = ComputePreciseDirectionFromPlanetCenter(RayDirection, t, PlanetCenterRelativeDF);
 			const float3 SamplePosition = DirectionFromPlanetCenterAtStep * InnerRadius;
 
-			const float2 Density = CalculateWeatherMap(
+			WeatherMap = CalculateWeatherMap(
 				SamplePosition,
-				InnerRadius,
+				OuterRadius,
 				CloudCoverageNoiseScale,
 				BaseNoiseType,
 				NoiseSeed,
@@ -191,14 +301,41 @@ void MainPS(
 				CloudsTypeLacunarity,
 				CloudsTypeGain);
 
-			// OpticalDepth += StepSize * saturate(Density.x);
-			const float StepContribution = StepSize * saturate(Density.x);
-			OpticalDepth += StepContribution;
-			WeightedHeight += StepContribution * HeightFromBottom;
+			const float Density = ComputeDensityAt(SamplePosition, InnerRadius, WeatherMap, HeightFromBottom, HeightGradient);
+
+			if (Density > 0.0)
+			{
+				ZeroDensityHitCount = 0;
+				if (bZeroDensityHit)
+				{
+					// First hit while still coarse-stepping: step back one coarse step and switch to fine
+					// resolution (0.3x). The for-loop's own increment (t += StepSize) runs right after this
+					// continue, using the just-shrunk StepSize — so the next iteration re-approaches this
+					// same point at fine resolution instead of accumulating the coarse-resolution sample.
+					t -= StepSize;
+					StepSize *= 0.3;
+					bZeroDensityHit = false;
+					continue;
+				}
+
+				const float StepContribution = StepSize * saturate(Density);
+				OpticalDepth += StepContribution;
+			}
+			else if (!bZeroDensityHit)
+			{
+				// Missed (zero density) while fine-stepping. 10 consecutive misses means we've walked out of
+				// the cloud — revert to coarse resolution instead of continuing to fine-step through empty sky.
+				ZeroDensityHitCount++;
+				if (ZeroDensityHitCount >= 10)
+				{
+					bZeroDensityHit = true;
+					StepSize /= 0.3;
+				}
+			}
 		}
 		// raymarch end -------------------------------------------------------------------------------
-		const float AverageHeightFraction = OpticalDepth > 0.0 ? WeightedHeight / OpticalDepth : 0.0;
-		Color = OpticalDepth > 0.0 ? lerp(0.1, 1.0, AverageHeightFraction) : 0.0;
+
+		Color = 1.0 - exp(-OpticalDepth);
 	}
 	break;
 	}

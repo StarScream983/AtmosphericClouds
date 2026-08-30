@@ -7,12 +7,12 @@ namespace OrbisCloudsPlanetPresets
 {
 	const FVector SmallCenter(1000000., 1000000., 350000.);
 	constexpr float SmallAtmosphereRadius = 500000.f;
-	constexpr float SmallCloudInnerRadius = 480000.f;
+	constexpr float SmallCloudInnerRadius = 490000.f;
 	constexpr float SmallCloudOuterRadius = 500000.f;
 
 	const FVector LargeCenter(700000000., 700000000., 350000.);
 	constexpr float LargeAtmosphereRadius = 600000000.f;
-	constexpr float LargeCloudInnerRadius = 580000000.f;
+	constexpr float LargeCloudInnerRadius = 590000000.f;
 	constexpr float LargeCloudOuterRadius = 600000000.f;
 }
 

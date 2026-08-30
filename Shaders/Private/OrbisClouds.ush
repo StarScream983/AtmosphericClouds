@@ -263,30 +263,6 @@ float HeightPresetCumulonimbus(float h)
 	return ThinEdgeFade(hc, 0.06, 0.12);
 }
 
-// Density at ray distance t: 0.8 at inner (bottom), 0.1 at outer (top). Zero outside the annulus.
-float ComputeDensityAt(
-	float t,
-	float3 RayDirection,
-	float3 PlanetCenter,
-	float InnerRadius,
-	float OuterRadius)
-{
-	const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenter);
-	const float ShellThickness = OuterRadius - InnerRadius;
-	if (ShellThickness <= 0.0)
-	{
-		return 0.0;
-	}
-
-	const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
-	if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
-	{
-		return 0.0;
-	}
-
-	return lerp(0.8, 0.1, HeightFromBottom);
-}
-
 // Camera-relative space: RayOrigin (camera) is 0, so outward radial "up" at the camera is normalize(-PlanetCenter).
 int FindStepCount(float3 RayDirection, float3 PlanetCenter)
 {

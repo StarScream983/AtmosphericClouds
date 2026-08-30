@@ -255,3 +255,97 @@ He literally says if the **bottom looks too flat**, change parameters and it bec
 **Vol 10** adds **HeightLUT** + Low/Mid/High tiers — another way to sculpt vertical envelope and edge breakup.
 
 **Verdict:** Same **visual goal** as HZD soft bottoms; not the same formula. Yvan gets there with **vertical remaps + erosion + powder**, and it’s **tuning-dependent**. If you implement HZD mode, you’ll want the explicit bottom density falloff; in Yvan mode, you lean on `SA`/`DA`/detail inversion and powder instead.
+
+---
+
+    	const int StepCount = FindStepCount(RayDirection, PlanetCenterRelative);
+    	const float CoarseStepSize = SegmentLength / StepCount;
+    	const float ShellThickness = OuterRadius - InnerRadius;
+    	float OpticalDepth = 0.0;
+    	float WeightedHeight = 0.0;
+
+    	// Adaptive raymarch: coarse steps (CoarseStepSize) until a step finds density, then step back one
+    	// coarse step and switch to fine steps (0.3x) to re-approach and resolve that surface, reverting to
+    	// coarse after 10 consecutive fine-step misses (walked out of the cloud). Same mechanism as Project-
+    	// Marshmallow's compute-clouds.comp (github.com/mccannd/Project-Marshmallow) — verified against its
+    	// source, and confirmed identical (same variable names, same 0.3x/10-miss constants) in an
+    	// independent project, YueZhang1027/CIS5650-Final-Project-Frostnova's compute.comp, before
+    	// implementing. We don't have Marshmallow's separate cheap/expensive density functions (cloudTest
+    	// vs cloudHiRes) — CalculateWeatherMap is used for both the coarse check and the real accumulation,
+    	// so the win here is skipping steps through empty sky and refining near the cloud surface, not a
+    	// cheap/expensive split.
+    	bool bNoHits = true;
+    	int MissCount = 0;
+    	int Iteration = 0;
+    	const int MaxIterations = StepCount * 8; // safety cap: fine stepping (0.3x) can need ~3.3x more steps locally
+    	float StepSize = CoarseStepSize;
+
+    	for (float t = tRaymarchEnter; t < tRaymarchExit && Iteration < MaxIterations && ShellThickness > 0.0; t += StepSize, Iteration++)
+    	{
+    		const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
+    		const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
+    		if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
+    		{
+    			continue;
+    		}
+
+    		// Was: normalize(RayOrigin + RayDirection * t - PlanetCenterRelative) — same precision loss as
+    		// the outer-shell case above (see ComputePreciseDirectionFromPlanetCenter in OrbisClouds.ush)
+    		// whenever the camera is far from the planet.
+    		const float3 DirectionFromPlanetCenterAtStep = ComputePreciseDirectionFromPlanetCenter(RayDirection, t, PlanetCenterRelativeDF);
+    		const float3 SamplePosition = DirectionFromPlanetCenterAtStep * InnerRadius;
+
+    		const float2 Density = CalculateWeatherMap(
+    			SamplePosition,
+    			InnerRadius,
+    			CloudCoverageNoiseScale,
+    			BaseNoiseType,
+    			NoiseSeed,
+    			NoiseOutputMin,
+    			NoiseOutputMax,
+    			CloudsCoverageOctaves,
+    			CloudsCoverageLacunarity,
+    			CloudsCoverageGain,
+    			bCloudsCoverageUseWarp != 0u,
+    			CloudsCoverageWarpStrength,
+    			CloudsCoverageWarpOctaves,
+    			CloudTypeNoiseScale,
+    			CloudTypeNoiseType,
+    			CloudTypeNoiseSeed,
+    			CloudsTypeOctaves,
+    			CloudsTypeLacunarity,
+    			CloudsTypeGain);
+
+    		if (Density.x > 0.0)
+    		{
+    			MissCount = 0;
+    			if (bNoHits)
+    			{
+    				// First hit while coarse-stepping: step back one coarse step and switch to fine
+    				// resolution. The for-loop's own increment (t += StepSize) runs right after this
+    				// continue, using the just-shrunk StepSize — so the next iteration starts approaching
+    				// this point again at fine resolution instead of accumulating the coarse-resolution
+    				// sample.
+    				t -= StepSize;
+    				StepSize *= 0.3;
+    				bNoHits = false;
+    				continue;
+    			}
+
+    			const float StepContribution = StepSize * saturate(Density.x);
+    			OpticalDepth += StepContribution;
+    			WeightedHeight += StepContribution * HeightFromBottom;
+    		}
+    		else if (!bNoHits)
+    		{
+    			MissCount++;
+    			if (MissCount >= 10)
+    			{
+    				// Walked out of the cloud during fine-stepping: revert to coarse resolution instead of
+    				// continuing to fine-step through empty sky.
+    				bNoHits = true;
+    				StepSize /= 0.3;
+    			}
+    		}
+    	}
+    	// raymarch end -------------------------------------------------------------------------------

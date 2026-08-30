@@ -43,11 +43,12 @@ User PDFs in `Docs/YVAN/` (re-add if missing): Vol 1–11 series + SD noise tuto
 ## # REPOS
 
 9. https://github.com/mccannd/Project-Marshmallow
-10. https://github.com/AmanSachan1/Meteoros
-11. https://github.com/wbttt/Volumetric-clouds-in-Unity
-12. https://github.com/adrianpolimeni/RealTimeVolumetricClouds
-13. https://github.com/valentingalea/shaderbox
-14. https://github.com/MiniMax-AI/skills/blob/main/skills/shader-dev/reference/volumetric-rendering.md
+10. https://github.com/YueZhang1027/CIS5650-Final-Project-Frostnova
+11. https://github.com/AmanSachan1/Meteoros
+12. https://github.com/wbttt/Volumetric-clouds-in-Unity
+13. https://github.com/adrianpolimeni/RealTimeVolumetricClouds
+14. https://github.com/valentingalea/shaderbox
+15. https://github.com/MiniMax-AI/skills/blob/main/skills/shader-dev/reference/volumetric-rendering.md
 
 ## External
 

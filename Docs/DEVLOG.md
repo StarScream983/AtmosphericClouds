@@ -79,3 +79,19 @@ That's the "ghost disc": wherever your camera's screen rays happened to point aw
 the product of the two roots always equals C = |camera-to-center|² - radius², which depends only on the camera's distance from the sphere center — never on ray direction. That means "camera outside vs. inside the sphere" is one fixed fact for the whole frame; what varies per-pixel is only whether a same-signed pair of roots is positive (ray toward the sphere, real hit) or negative (ray away from it, no hit at all). I added an explicit check: if the far root is negative, both roots are behind the camera, so return a genuine miss (-1, -1) instead of clamping to (0, 0).
 
 This was a bug shared by the original formula too (it did the same unconditional clamp) — it just took the earlier fixes (depth-occlusion gate, precision rewrite) clearing away the other issues before this one became visible on its own.
+
+---
+
+## ENGINE CRASHES WHEN WE CHANGE FROM INT TO FLOAT FOR LOOP
+
+The problem, plainly:
+
+The loop moves forward by doing t += StepSize each time, and it stops when t reaches tRaymarchExit. That works fine most of the time. But near the edge of the visible planet, some rays barely graze the cloud shell — they pass through a very thin sliver of it. That thin sliver means SegmentLength (and therefore StepSize, which is SegmentLength / StepCount) becomes extremely small for those specific pixels.
+
+Here's the trap: floating-point numbers lose precision as they get bigger — the further t is from zero, the less precisely tiny additions to it can be represented. If t is already a large number and StepSize is small enough, t + StepSize can come out exactly equal to t — the addition just gets swallowed, like adding a fraction of a cent to a billion dollars and the total not changing. When that happens, t never advances. t < tRaymarchExit stays true forever. The loop never ends. The GPU can't run one shader invocation forever, so Windows eventually kills the driver — that's the crash.
+
+The old int-based loop never had this problem because its stop condition (StepIndex < StepCount) was a plain integer counter, completely unrelated to what t's float value was doing — integers don't have this "swallowed by a big number" issue. When we switched the loop to be driven by t directly, we lost that built-in safety net.
+
+The solution: add that safety net back explicitly — a second, independent stop condition that counts iterations with a plain integer and bails out after some maximum, regardless of what t is doing. That guarantees the loop always terminates, even in the broken case.
+
+Concretely, one new line: track an iteration counter, and add && Iteration < MaxIterations to the loop condition alongside t < tRaymarchExit
