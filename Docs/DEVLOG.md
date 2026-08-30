@@ -95,3 +95,101 @@ The old int-based loop never had this problem because its stop condition (StepIn
 The solution: add that safety net back explicitly — a second, independent stop condition that counts iterations with a plain integer and bails out after some maximum, regardless of what t is doing. That guarantees the loop always terminates, even in the broken case.
 
 Concretely, one new line: track an iteration counter, and add && Iteration < MaxIterations to the loop condition alongside t < tRaymarchExit
+
+---
+
+## HEIGHT SIGNAL
+
+```c
+Remap(h, 0, 0.07, 0, 1) * Remap(h, type*0.2, type, 1, 0)
+```
+
+## 2026-08-30 — Beer-HG-Powder lighting plan (proposed, not yet applied)
+
+Sun direction/color are already available for free — `ResolvedView.AtmosphereLightDirection[0]`/`AtmosphereLightIlluminanceOnGroundPostTransmittance[0]` come from the `View` uniform buffer we already bind, same as Epic's own `VolumetricCloud.usf`. The HG phase function also already exists engine-side (`ParticipatingMediaCommon.ush:91`, `HenyeyGreensteinPhase(G, CosTheta)`), no need to write our own.
+
+Here's the suggested addition, in three pieces:
+
+**1. Density-toward-light sampler** (add to `OrbisClouds.usf`, after `ComputeDensityAt`):
+
+```hlsl
+// Cheap approximation of HZD's 6-sample light cone: march a few samples toward the sun and sum density.
+// Reuses the current step's HeightGradient for every light sample instead of recomputing each one's actual
+// radius — the light-ray offsets here are small relative to InnerRadius, so this is a reasonable simplification.
+float SampleDensityTowardLight(float3 SamplePosition, float3 SunDirection, float InnerRadius, float BaseHeightGradient)
+{
+	const int LightSampleCount = 4;
+	const float LightStepSize = InnerRadius * 0.01; // ~1% of inner radius per step, tune to taste
+
+	float DensitySum = 0.0;
+	float3 LightSamplePosition = SamplePosition;
+	for (int i = 0; i < LightSampleCount; i++)
+	{
+		LightSamplePosition += SunDirection * LightStepSize;
+		const float2 LightWeatherMap = CalculateWeatherMap(
+			LightSamplePosition, OuterRadius, CloudCoverageNoiseScale, BaseNoiseType, NoiseSeed,
+			NoiseOutputMin, NoiseOutputMax, CloudsCoverageOctaves, CloudsCoverageLacunarity, CloudsCoverageGain,
+			bCloudsCoverageUseWarp != 0u, CloudsCoverageWarpStrength, CloudsCoverageWarpOctaves,
+			CloudTypeNoiseScale, CloudTypeNoiseType, CloudTypeNoiseSeed,
+			CloudsTypeOctaves, CloudsTypeLacunarity, CloudsTypeGain);
+		DensitySum += ComputeDensityAt(LightSamplePosition, InnerRadius, LightWeatherMap, 0.0, BaseHeightGradient) * LightStepSize;
+	}
+	return DensitySum;
+}
+```
+
+**2. Beer-HG-Powder combine** (small standalone function, next to it):
+
+```hlsl
+// Schneider's "Beer's-Powder" approximation (HZD 2015 talk, slides 61-64): Beer's law for primary
+// extinction, Henyey-Greenstein for forward-scatter silver lining, powder term for the dark edges facing
+// the light (1 - exp(-2d) — saturates faster than plain Beer's, punches through on shallow/thin edges).
+float ComputeLightEnergy(float DensityTowardLight, float CosTheta, float PhaseG)
+{
+	const float BeersLaw = exp(-DensityTowardLight);
+	const float Powder = 1.0 - exp(-DensityTowardLight * 2.0);
+	const float Phase = HenyeyGreensteinPhase(PhaseG, -CosTheta);
+	return BeersLaw * Powder * Phase;
+}
+```
+
+**3. Integration into the `case 2u` raymarch loop** — replace the `OpticalDepth`-only accumulation with front-to-back radiance/transmittance, so `Color` becomes lit and sun-tinted instead of a flat grey alpha ramp:
+
+```hlsl
+// Was: float OpticalDepth = 0.0; float WeightedHeight = 0.0;
+float3 Radiance = 0.0;
+float Transmittance = 1.0;
+
+const float3 SunDirection = ResolvedView.AtmosphereLightDirection[0].xyz;
+const float3 SunIlluminance = ResolvedView.AtmosphereLightIlluminanceOnGroundPostTransmittance[0].rgb;
+const float CosTheta = dot(SunDirection, RayDirection);
+const float PhaseG = 0.2; // forward-scatter eccentricity, tune to taste
+
+...inside the loop, replacing the StepContribution/OpticalDepth block...
+
+if (Density > 0.0)
+{
+	...
+	const float DensityTowardLight = SampleDensityTowardLight(SamplePosition, SunDirection, InnerRadius, HeightGradient);
+	const float LightEnergy = ComputeLightEnergy(DensityTowardLight, CosTheta, PhaseG);
+
+	const float StepTransmittance = exp(-Density * StepSize);
+	Radiance += Transmittance * (1.0 - StepTransmittance) * LightEnergy * SunIlluminance;
+	Transmittance *= StepTransmittance;
+
+	if (Transmittance < 0.01)
+	{
+		break;
+	}
+}
+```
+
+And at the end, instead of `Color = 1.0 - exp(-OpticalDepth);`:
+
+```hlsl
+Color = ... // Color is currently a scalar broadcast to OutColor.rgb — this needs OutColor = float4(Radiance, 1.0 - Transmittance) directly for case 2u instead, since Radiance is now colored, not grayscale.
+```
+
+That last part means restructuring the end of `MainPS` slightly since `Color`/`OutColor = float4(Color,Color,Color,1)` is shared across all view modes — cases 0/1 stay scalar, case 2 needs its own `OutColor` write with the colored `Radiance` and `(1.0 - Transmittance)` alpha.
+
+Not yet applied — `Noise.ush`'s Coverage/CloudType formula is currently mid-flux (uncommitted `clamp` vs `lerp` swap), sort that out first.

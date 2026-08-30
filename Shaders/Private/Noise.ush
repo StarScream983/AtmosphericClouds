@@ -303,8 +303,8 @@ float2 CalculateWeatherMap(
 											  ? WarpPosition3D(CoverageSamplePosition, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain, CloudsCoverageWarpOctaves, CloudsCoverageWarpStrength)
 											  : CoverageSamplePosition;
 	const float CoverageNoise = SampleFbmNoise3D(WarpedCoveragePosition, CloudsCoverageOctaves, BaseNoiseType, NoiseSeed, CloudsCoverageLacunarity, CloudsCoverageGain);
-	// const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, CoverageNoise * 0.5 + 0.5);
-	const float Coverage = clamp(CoverageNoise, 0., 1.);
+	const float Coverage = lerp(NoiseOutputMin, NoiseOutputMax, CoverageNoise * 0.5 + 0.5);
+	// const float Coverage = clamp(CoverageNoise, 0., 1.);
 
 	const float CloudTypeFrequency = CloudTypeNoiseScale / PlanetDiameter;
 	const float CloudTypeNoiseValue = SampleFbmNoise3D(
