@@ -41,7 +41,7 @@ public:
 	int32 NoiseSeed = 1337;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage")
-	EOrbisCloudsBaseNoise BaseNoise = EOrbisCloudsBaseNoise::Simplex;
+	EOrbisCloudsBaseNoise BaseNoise = EOrbisCloudsBaseNoise::Value;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
 	float NoiseOutputMin = -1.f;
@@ -59,13 +59,13 @@ public:
 	float CloudsCoverageGain = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage")
-	bool bCloudsCoverageUseWarp = false;
+	bool bCloudsCoverageUseWarp = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "0.0", ClampMax = "8.0"))
-	float CloudsCoverageWarpStrength = 1.f;
+	float CloudsCoverageWarpStrength = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Coverage", meta = (ClampMin = "1", ClampMax = "8"))
-	int32 CloudsCoverageWarpOctaves = 3;
+	int32 CloudsCoverageWarpOctaves = 6;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Cloud Type", meta = (ClampMin = "0.1", ClampMax = "4096.0"))
 	float CloudTypeNoiseScale = 2.f;

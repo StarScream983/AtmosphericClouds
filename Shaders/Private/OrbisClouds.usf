@@ -70,8 +70,14 @@ float ComputeDensityAt(
 		return lerp(0.8, 0.1, HeightGradient);
 	}
 
-	const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
-	const float BaseShapeFrequency = CloudCoverageNoiseScale / PlanetDiameter;
+	// Was: CloudCoverageNoiseScale / PlanetDiameter — tied the 128^3 texture's sampling frequency to planet
+	// size, so at Small preset a raymarch step moved the sample position by a tiny fraction of one texel,
+	// stretching the texture's actual detail across the whole planet diameter and never resolving it. Fixed
+	// constant instead, independent of which preset is active — a cloud puff's physical size shouldn't
+	// change depending on the preset button. Same tens-of-thousands-of-UU ballpark Marshmallow (2.5% of a
+	// 2,000,000 UU planet = 50,000) and YVAN Volume 11 (fixed 600,000) actually use.
+	const float BaseShapeWorldSpan = 12000.0; // UU that one full 128^3 tile covers
+	const float BaseShapeFrequency = 1.0 / BaseShapeWorldSpan;
 	const float4 BaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, SamplePosition * BaseShapeFrequency);
 
 	// calculate HeightSignal — verified from the purchased VolumetricClouds plugin's M_VolumetricClouds.uasset
@@ -90,6 +96,24 @@ float ComputeDensityAt(
 	// multiply by coverage and height gradient
 	const float Coverage = WeatherMap.x;
 	Density *= Coverage * (1. - HeightGradient);
+
+	// Low-res erosion (HZD 2015 "Modeling" slide, step 3 — the low-LOD half of it; the hi-res 32^3
+	// DetailNoiseTexture + curl-noise distortion pass is a separate follow-up, not done here). Verified
+	// verbatim against Project-Marshmallow's cloudTest (compute-clouds.comp:247-250): a 3-octave weighted
+	// erosion built from the SAME BaseShapeNoiseTexture's G/B/A channels (not a second texture at this LOD),
+	// then used as the low bound of a remap to carve the base density — density below the erosion threshold
+	// gets carved toward 0, which is what actually gives the shape ragged/eroded edges instead of a smooth
+	// blob.
+	// Was: Remap(Erosion, Coverage, 1.0, 0.0, 1.0) — with Coverage low almost everywhere (not height-biased
+	// like Marshmallow's own coverage variable), that remap range is wide, so ErosionThreshold tracked the
+	// raw Erosion value almost directly, giving erosion full, unrestricted carving power everywhere instead
+	// of just at thin/wispy edges — collapsed nearly the whole visible coverage to a few tiny islands.
+	// ErosionStrength caps how much of the density band erosion can ever carve into, independent of
+	// Coverage, so it can be dialed in gradually instead of risking the same collapse. Start low.
+	const float Erosion = 0.625 * BaseShapeNoise.y + 0.25 * BaseShapeNoise.z + 0.125 * BaseShapeNoise.w;
+	const float ErosionStrength = 0.15;
+	const float ErosionThreshold = Erosion * ErosionStrength;
+	Density = Remap(Density, ErosionThreshold, 1.0, 0.0, 1.0);
 
 	return Density;
 }
@@ -226,8 +250,7 @@ void MainPS(
 		// TEMPORARY DEBUG: raw BaseShapeNoise.x sampled on the outer sphere, no Remap/Coverage/Erosion
 		// applied at all — isolating whether the moiré/parallel-line pattern seen in Clouds mode comes from
 		// the texture sample itself (aliasing) or from the density math built on top of it.
-		const float PlanetDiameter = max(2.0 * InnerRadius, 1.0);
-		const float BaseShapeFrequency = CloudCoverageNoiseScale / PlanetDiameter;
+		const float BaseShapeFrequency = 1.0 / 12000.0; // matches ComputeDensityAt's BaseShapeWorldSpan
 		const float4 RawBaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, OuterSurfacePosition * BaseShapeFrequency);
 		OutColor = float4(RawBaseShapeNoise.xxx, 1.0);
 		return;
@@ -263,7 +286,12 @@ void MainPS(
 		bool bZeroDensityHit = true;
 		int ZeroDensityHitCount = 0;
 
-		for (float t = tRaymarchEnter; t < tRaymarchExit && ShellThickness > 0.0 && Iteration < MaxIterations; t += StepSize, Iteration++)
+		// Same idea as YVAN Volume 11's AccumSacteringTransmittance.a < 0.01 break: once OpticalDepth is high
+		// enough that Color = 1 - exp(-OpticalDepth) is already indistinguishable from fully opaque, every
+		// further sample is wasted work. exp(-5) ~= 0.0067, i.e. Color ~= 0.993 — visually saturated.
+		// Note: && here, not || — the loop condition is "keep going while true", so stopping once OpticalDepth
+		// reaches 5 needs OpticalDepth < 5.0 as an AND'd continuation condition, not an OR.
+		for (float t = tRaymarchEnter; t < tRaymarchExit && ShellThickness > 0.0 && Iteration < MaxIterations && OpticalDepth < 5.0; t += StepSize, Iteration++)
 		{
 			const float tHalf = tRaymarchEnter + 0.5 * StepSize;
 			const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);

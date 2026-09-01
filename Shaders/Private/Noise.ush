@@ -314,8 +314,8 @@ float2 CalculateWeatherMap(
 		CloudTypeNoiseSeed,
 		CloudsTypeLacunarity,
 		CloudsTypeGain);
-	// const float CloudType = saturate(CloudTypeNoiseValue * 0.5 + 0.5);
-	const float CloudType = clamp(CloudTypeNoiseValue, 0., 1.);
+	const float CloudType = saturate(CloudTypeNoiseValue * 0.5 + 0.5);
+	// const float CloudType = clamp(CloudTypeNoiseValue, 0., 1.);
 
 	return float2(Coverage, CloudType);
 }
