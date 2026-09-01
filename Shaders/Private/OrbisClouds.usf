@@ -48,6 +48,38 @@ float Remap(float Value, float OldMin, float OldMax, float NewMin, float NewMax)
 	return NewMin + saturate((Value - OldMin) / (OldMax - OldMin)) * (NewMax - NewMin);
 }
 
+// Standard dither/jitter noise (Jorge Jimenez, "Next Generation Post Processing in Call of Duty: Advanced
+// Warfare"), used to break up the fixed-spacing sample lattice fine-stepping produces (see the jitter comment
+// where this is used in MainPS's raymarch loop) — every ray currently starts fine-stepping at exactly the
+// same phase, which lines up with the noise texture's own spatial frequency and shows up as contour bands.
+float InterleavedGradientNoise(float2 PixelCoord)
+{
+	const float3 Magic = float3(0.06711056, 0.00583715, 52.9829189);
+	return frac(Magic.z * frac(dot(PixelCoord, Magic.xy)));
+}
+
+// Beer's law: how much light survives passing through a given optical depth.
+float BeersLaw(float OpticalDepth)
+{
+	return exp(-OpticalDepth);
+}
+
+// Henyey-Greenstein phase function: probability of light scattering toward the viewer at a given angle.
+// G > 0 favors forward scattering (the "silver lining" toward the sun), G < 0 favors backward scattering.
+float HenyeyGreenstein(float CosAngle, float G)
+{
+	const float G2 = G * G;
+	return (1.0 - G2) / (4.0 * 3.1415927 * pow(1.0 + G2 - 2.0 * G * CosAngle, 1.5));
+}
+
+// Schneider's "powdered sugar" term (HZD 2015 talk, slides 58-64): darkens the edges facing the light,
+// approximating the extra in-scattered light gathered deeper inside a cloud. Saturates faster than plain
+// Beer's law (2x the exponent), so it punches through on thin/shallow edges instead of staying dark there.
+float Powder(float OpticalDepth)
+{
+	return 1.0 - exp(-OpticalDepth * 2.0);
+}
+
 // cloudTest equivalent (Project-Marshmallow compute-clouds.comp:231-253, verified verbatim against source
 // before implementing — see comment on Remap's caller below for the exact original). densityNoise there is
 // our BaseShapeNoiseTexture (4-channel: R = base shape, GBA = Worley erosion octaves at increasing
