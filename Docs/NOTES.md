@@ -258,94 +258,37 @@ He literally says if the **bottom looks too flat**, change parameters and it bec
 
 ---
 
-    	const int StepCount = FindStepCount(RayDirection, PlanetCenterRelative);
-    	const float CoarseStepSize = SegmentLength / StepCount;
-    	const float ShellThickness = OuterRadius - InnerRadius;
-    	float OpticalDepth = 0.0;
-    	float WeightedHeight = 0.0;
+## Plan: stepping LODs — coarse/fine raymarch with low-detail texture LOD
 
-    	// Adaptive raymarch: coarse steps (CoarseStepSize) until a step finds density, then step back one
-    	// coarse step and switch to fine steps (0.3x) to re-approach and resolve that surface, reverting to
-    	// coarse after 10 consecutive fine-step misses (walked out of the cloud). Same mechanism as Project-
-    	// Marshmallow's compute-clouds.comp (github.com/mccannd/Project-Marshmallow) — verified against its
-    	// source, and confirmed identical (same variable names, same 0.3x/10-miss constants) in an
-    	// independent project, YueZhang1027/CIS5650-Final-Project-Frostnova's compute.comp, before
-    	// implementing. We don't have Marshmallow's separate cheap/expensive density functions (cloudTest
-    	// vs cloudHiRes) — CalculateWeatherMap is used for both the coarse check and the real accumulation,
-    	// so the win here is skipping steps through empty sky and refining near the cloud surface, not a
-    	// cheap/expensive split.
-    	bool bNoHits = true;
-    	int MissCount = 0;
-    	int Iteration = 0;
-    	const int MaxIterations = StepCount * 8; // safety cap: fine stepping (0.3x) can need ~3.3x more steps locally
-    	float StepSize = CoarseStepSize;
+**Context.** The Clouds raymarch (`case 2u` in `Shaders/Private/OrbisClouds.usf`) currently marches every step at full resolution — same fixed `StepSize` for the whole ray, same full-detail `Texture3DSample` (implicit mip) on every single `ComputeDensityAt` call, whether or not there's actually any cloud there yet. The shape/lighting was just brought in line with a verified working reference (plain Beer's law light march, Density-weighted opacity accumulation) and now looks close to the HZD 2015 talk's reference screenshots. Next: make the raymarch itself match the talk's actual technique — a cheap "low resolution cloud" pass to quickly find where the ray enters cloud material, then a full-detail pass once inside — both for performance and to match the paper's described modeling process ("Sample 3dTexture1 ... to build low resolution cloud" → refine with erosion/coverage).
 
-    	for (float t = tRaymarchEnter; t < tRaymarchExit && Iteration < MaxIterations && ShellThickness > 0.0; t += StepSize, Iteration++)
-    	{
-    		const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
-    		const float HeightFromBottom = (Radius - InnerRadius) / ShellThickness;
-    		if (HeightFromBottom < 0.0 || HeightFromBottom > 1.0)
-    		{
-    			continue;
-    		}
+There's a second, related motive. Earlier, a coarse/fine adaptive-stepping mechanism (Marshmallow-style: march coarse until density is first hit, then switch to a finer step size) was implemented, then fully commented out (not deleted) after being blamed for a contour/terracing visual artifact. That artifact was later root-caused precisely: an _unjittered_ fixed step lattice (regular, identical phase every ray) beats against the noise texture's own spatial frequency, regardless of step count or coarse/fine switching — confirmed by adding a per-ray start-phase jitter (`InterleavedGradientNoise` on `SvPosition`), which fixed it, and separately confirmed by removing it again (terracing came back) later. So reviving the coarse/fine mechanism now is safe _if_ the jitter comes back with it — reviving one without the other risks reproducing either the flicker or the terracing.
 
-    		// Was: normalize(RayOrigin + RayDirection * t - PlanetCenterRelative) — same precision loss as
-    		// the outer-shell case above (see ComputePreciseDirectionFromPlanetCenter in OrbisClouds.ush)
-    		// whenever the camera is far from the planet.
-    		const float3 DirectionFromPlanetCenterAtStep = ComputePreciseDirectionFromPlanetCenter(RayDirection, t, PlanetCenterRelativeDF);
-    		const float3 SamplePosition = DirectionFromPlanetCenterAtStep * InnerRadius;
+**Outcome:** the primary optical-depth raymarch does a cheap, blurry-texture coarse march to find cloud entry, then switches to a full-detail fine march for real accumulation. Scope is the **primary ray only** — the just-fixed 6-sample light march stays untouched (always full detail), since touching it now would undo the just-verified match to the working reference.
 
-    		const float2 Density = CalculateWeatherMap(
-    			SamplePosition,
-    			InnerRadius,
-    			CloudCoverageNoiseScale,
-    			BaseNoiseType,
-    			NoiseSeed,
-    			NoiseOutputMin,
-    			NoiseOutputMax,
-    			CloudsCoverageOctaves,
-    			CloudsCoverageLacunarity,
-    			CloudsCoverageGain,
-    			bCloudsCoverageUseWarp != 0u,
-    			CloudsCoverageWarpStrength,
-    			CloudsCoverageWarpOctaves,
-    			CloudTypeNoiseScale,
-    			CloudTypeNoiseType,
-    			CloudTypeNoiseSeed,
-    			CloudsTypeOctaves,
-    			CloudsTypeLacunarity,
-    			CloudsTypeGain);
+### Approach
 
-    		if (Density.x > 0.0)
-    		{
-    			MissCount = 0;
-    			if (bNoHits)
-    			{
-    				// First hit while coarse-stepping: step back one coarse step and switch to fine
-    				// resolution. The for-loop's own increment (t += StepSize) runs right after this
-    				// continue, using the just-shrunk StepSize — so the next iteration starts approaching
-    				// this point again at fine resolution instead of accumulating the coarse-resolution
-    				// sample.
-    				t -= StepSize;
-    				StepSize *= 0.3;
-    				bNoHits = false;
-    				continue;
-    			}
+**1. `ComputeDensityAt` gets an explicit LOD parameter** (`Shaders/Private/OrbisClouds.usf`). Add a `float DetailLOD` parameter (6th param, after `HeightGradient`). Switch the base-shape texture fetch from implicit-derivative `Texture3DSample` to explicit `Texture3DSampleLevel(BaseShapeNoiseTexture, BaseShapeNoiseSampler, SamplePosition * BaseShapeFrequency, DetailLOD)`. Mips are confirmed to exist on this asset (standard UE mip chain, `MipGenSettings = TMGS_FromTextureGroup`, not disabled) — no texture-authoring changes needed. A single mip fetch returns all 4 channels (R=base shape, GBA=erosion octaves) at once, so a coarser mip cheaply blurs both the base shape _and_ erosion detail together — no separate "skip erosion" logic needed.
 
-    			const float StepContribution = StepSize * saturate(Density.x);
-    			OpticalDepth += StepContribution;
-    			WeightedHeight += StepContribution * HeightFromBottom;
-    		}
-    		else if (!bNoHits)
-    		{
-    			MissCount++;
-    			if (MissCount >= 10)
-    			{
-    				// Walked out of the cloud during fine-stepping: revert to coarse resolution instead of
-    				// continuing to fine-step through empty sky.
-    				bNoHits = true;
-    				StepSize /= 0.3;
-    			}
-    		}
-    	}
-    	// raymarch end -------------------------------------------------------------------------------
+Update all 3 existing call sites: primary ray fine phase → `DetailLOD = 0.0`; primary ray new coarse phase → `DetailLOD = CoarseDetailLOD` (new constant, start at `3.0`, tune visually); light march → unchanged, `DetailLOD = 0.0`; debug/test view → `DetailLOD = 0.0`.
+
+**2. Restore coarse/fine adaptive stepping in the primary loop** (`case 2u`). Uncomment the existing `bZeroDensityHit`/`ZeroDensityHitCount` state and both branches (first-hit coarse→fine switch, 10-miss fine→coarse revert) — these are still sitting in the file as comments, so this is a straightforward uncomment, not a rewrite. Wire `DetailLOD` through: `CoarseDetailLOD` while `bZeroDensityHit` is true, `0.0` once switched to fine.
+
+**3. Re-add per-ray start jitter.** Re-add the `InterleavedGradientNoise` helper function and the `SvPosition : SV_Position` parameter to `MainPS`. Jitter the loop's starting `t` by `InterleavedGradientNoise(SvPosition.xy) * StepSize`, same as the version that fixed the terracing before. Flagging explicitly: jitter was removed by direct instruction earlier tonight, and this reverses that — specifically because coarse/fine stepping (a fixed-lattice hazard) is coming back with it.
+
+### Files touched
+
+`Shaders/Private/OrbisClouds.usf` only — `ComputeDensityAt` signature + call sites, `MainPS` signature (`SvPosition`), the `case 2u` loop (jitter, uncommented coarse/fine branches, `DetailLOD` wiring), and the small `InterleavedGradientNoise` helper restored near the top with the other math helpers. No C++ changes, no new UPROPERTY/CVar — `CoarseDetailLOD` starts as a hardcoded shader constant, same as `BaseShapeWorldSpan` did before being promoted to an ImGui param. Shader-only edit — hot-reloads, no rebuild needed.
+
+### Verification
+
+1. Reload the shader, confirm `Clouds` view mode still renders the same overall shape/lighting as the just-fixed YVAN-reference-matched version (no regression).
+2. Confirm the terracing/contour artifact does not return — check both a wide/orbital view and a close-up ground-level view.
+3. Confirm no new flicker under a fully static camera.
+4. Visually compare against the HZD 2015 "Modeling" slide reference image for overall shape character.
+
+### REALIZATION:
+
+large scale planets create banding and blurry renders, i will attempt optimized progressive large steps, shouldn't take more performance, as steps will grow as raymarch through large distances.
+steps that increase in length according to distance from camera, we'll have to figure out the distance thresholds, far orbit close orbit, close clouds shell, mid range clouds shell, and far range clouds shell.
+all this is still cheap large steps, when we hit density, we go back one large step and start small steps for high detail texture sample, the exit when desity hits saturation or zero density for 10 small steps.

@@ -35,6 +35,7 @@ FOrbisCloudsPlanetRenderData UOrbisCloudsComponent::BuildPlanetRenderData() cons
 	Data.CloudsTypeOctaves = FMath::Clamp(CloudsTypeOctaves, 1, 8);
 	Data.CloudsTypeLacunarity = FMath::Clamp(CloudsTypeLacunarity, 1.f, 4.f);
 	Data.CloudsTypeGain = FMath::Clamp(CloudsTypeGain, 0.1f, 0.9f);
+	Data.BaseShapeWorldSpan = FMath::Max(BaseShapeWorldSpan, 1.f);
 	if (BaseShapeNoiseTexture && BaseShapeNoiseTexture->GetResource())
 	{
 		Data.BaseShapeNoiseTextureRHI = BaseShapeNoiseTexture->GetResource()->TextureRHI;

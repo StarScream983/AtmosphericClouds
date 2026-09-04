@@ -28,6 +28,7 @@ uint CloudTypeNoiseType;
 int CloudsTypeOctaves;
 float CloudsTypeLacunarity;
 float CloudsTypeGain;
+float BaseShapeWorldSpan;
 uint CloudsViewMode;
 uint bDebugSolid;
 uint bDepthOcclusion;
@@ -46,16 +47,6 @@ uint bHasDetailNoiseTexture;
 float Remap(float Value, float OldMin, float OldMax, float NewMin, float NewMax)
 {
 	return NewMin + saturate((Value - OldMin) / (OldMax - OldMin)) * (NewMax - NewMin);
-}
-
-// Standard dither/jitter noise (Jorge Jimenez, "Next Generation Post Processing in Call of Duty: Advanced
-// Warfare"), used to break up the fixed-spacing sample lattice fine-stepping produces (see the jitter comment
-// where this is used in MainPS's raymarch loop) — every ray currently starts fine-stepping at exactly the
-// same phase, which lines up with the noise texture's own spatial frequency and shows up as contour bands.
-float InterleavedGradientNoise(float2 PixelCoord)
-{
-	const float3 Magic = float3(0.06711056, 0.00583715, 52.9829189);
-	return frac(Magic.z * frac(dot(PixelCoord, Magic.xy)));
 }
 
 // Beer's law: how much light survives passing through a given optical depth.
@@ -108,7 +99,8 @@ float ComputeDensityAt(
 	// constant instead, independent of which preset is active — a cloud puff's physical size shouldn't
 	// change depending on the preset button. Same tens-of-thousands-of-UU ballpark Marshmallow (2.5% of a
 	// 2,000,000 UU planet = 50,000) and YVAN Volume 11 (fixed 600,000) actually use.
-	const float BaseShapeWorldSpan = 12000.0; // UU that one full 128^3 tile covers
+	// Was: hardcoded 12000.0 — now BaseShapeWorldSpan, an ImGui-exposed component property (Authored
+	// Textures), for live testing without a shader recompile per value.
 	const float BaseShapeFrequency = 1.0 / BaseShapeWorldSpan;
 	const float4 BaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, SamplePosition * BaseShapeFrequency);
 
@@ -282,7 +274,9 @@ void MainPS(
 		// TEMPORARY DEBUG: raw BaseShapeNoise.x sampled on the outer sphere, no Remap/Coverage/Erosion
 		// applied at all — isolating whether the moiré/parallel-line pattern seen in Clouds mode comes from
 		// the texture sample itself (aliasing) or from the density math built on top of it.
-		const float BaseShapeFrequency = 1.0 / 12000.0; // matches ComputeDensityAt's BaseShapeWorldSpan
+		// Was: hardcoded 1.0 / 12000.0 — never actually linked to BaseShapeWorldSpan, so changing that
+		// parameter had zero effect here even though it looked like a live test of it.
+		const float BaseShapeFrequency = 1.0 / BaseShapeWorldSpan;
 		const float4 RawBaseShapeNoise = Texture3DSample(BaseShapeNoiseTexture, BaseShapeNoiseSampler, OuterSurfacePosition * BaseShapeFrequency);
 		OutColor = float4(RawBaseShapeNoise.xxx, 1.0);
 		return;
@@ -300,8 +294,21 @@ void MainPS(
 		const int StepCount = FindStepCount(RayDirection, PlanetCenterRelative);
 		float StepSize = SegmentLength / StepCount;
 		const float ShellThickness = OuterRadius - InnerRadius;
-		float OpticalDepth = 0.0;
-		float WeightedHeight = 0.0;
+		// Was: the real YVAN Volume 11 analytic single-scattering integrator (Transmittance/AccumScattering,
+		// SigmaT-based) — reverted back to this Density-weighted average, since the analytic integral proved
+		// numerically unstable for our sparse/noisy density field (confirmed: saturate() turned per-step
+		// spikes into solid white patches almost everywhere density was found, not a rare edge case).
+		float AccumDensity = 0.0;
+		float WeightedLight = 0.0;
+
+		// Was: hardcoded float3(0.4, 0.6, 0.7) — ResolvedView.AtmosphereLightDirection[0] read black despite a
+		// correctly-configured Directional Light (that field needs a SkyAtmosphere component to populate).
+		// PrimaryView.DirectionalLightDirection is set directly from the scene's directional light instead.
+		// TEMPORARY test: back to hardcoded, to isolate whether the lack of shading is the light march itself
+		// or specifically PrimaryView.DirectionalLightDirection being zero/NaN.
+		const float3 SunDirection = normalize(float3(1.0, 1.0, 1.0));
+		const float CosAngle = dot(RayDirection, SunDirection); // constant along the whole ray
+		const float HGPeak = HenyeyGreenstein(1.0, 0.2);
 
 		// Iteration is a plain integer safety net, independent of t: for near-tangent rays SegmentLength (and
 		// so StepSize) can be tiny, and if t is large enough that t + StepSize rounds back to t in float32,
@@ -310,20 +317,11 @@ void MainPS(
 		int Iteration = 0;
 		const int MaxIterations = StepCount;
 
-		// Adaptive raymarch state (Marshmallow's mechanism): bZeroDensityHit is true while coarse-stepping
-		// (no density found yet), false once a hit switches us to fine-stepping. ZeroDensityHitCount counts
-		// consecutive zero-density samples during fine-stepping, used to revert back to coarse once we've
-		// walked out of the cloud. Not used by the loop yet — this is just the state declaration, the
 		// switching logic comes next.
-		bool bZeroDensityHit = true;
-		int ZeroDensityHitCount = 0;
+		// bool bZeroDensityHit = true;
+		// int ZeroDensityHitCount = 0;
 
-		// Same idea as YVAN Volume 11's AccumSacteringTransmittance.a < 0.01 break: once OpticalDepth is high
-		// enough that Color = 1 - exp(-OpticalDepth) is already indistinguishable from fully opaque, every
-		// further sample is wasted work. exp(-5) ~= 0.0067, i.e. Color ~= 0.993 — visually saturated.
-		// Note: && here, not || — the loop condition is "keep going while true", so stopping once OpticalDepth
-		// reaches 5 needs OpticalDepth < 5.0 as an AND'd continuation condition, not an OR.
-		for (float t = tRaymarchEnter; t < tRaymarchExit && ShellThickness > 0.0 && Iteration < MaxIterations && OpticalDepth < 5.0; t += StepSize, Iteration++)
+		for (float t = tRaymarchEnter; t < tRaymarchExit && ShellThickness > 0.0 && Iteration < MaxIterations; t += StepSize, Iteration++)
 		{
 			const float tHalf = tRaymarchEnter + 0.5 * StepSize;
 			const float Radius = SampleRadiusAlongRay(t, RayDirection, PlanetCenterRelative);
@@ -365,37 +363,61 @@ void MainPS(
 
 			if (Density > 0.0)
 			{
-				ZeroDensityHitCount = 0;
-				if (bZeroDensityHit)
+				// ZeroDensityHitCount = 0;
+				// if (bZeroDensityHit)
+				// {
+				// 	// First hit while still coarse-stepping: step back one coarse step and switch to fine
+				// 	// resolution (0.3x). The for-loop's own increment (t += StepSize) runs right after this
+				// 	// continue, using the just-shrunk StepSize — so the next iteration re-approaches this
+				// 	// same point at fine resolution instead of accumulating the coarse-resolution sample.
+				// 	t -= StepSize;
+				// 	StepSize *= 0.3;
+				// 	bZeroDensityHit = false;
+				// 	continue;
+				// }
+
+				float DensityAlongLight = 0.0;
+				float3 LightSamplePosition = SamplePosition;
+				const float LightStepSize = 3.0 * StepSize;
+				for (int LightStep = 0; LightStep < 6; LightStep++)
 				{
-					// First hit while still coarse-stepping: step back one coarse step and switch to fine
-					// resolution (0.3x). The for-loop's own increment (t += StepSize) runs right after this
-					// continue, using the just-shrunk StepSize — so the next iteration re-approaches this
-					// same point at fine resolution instead of accumulating the coarse-resolution sample.
-					t -= StepSize;
-					StepSize *= 0.3;
-					bZeroDensityHit = false;
-					continue;
+					const float LightRadius = length(LightSamplePosition);
+					const float LightHeightGradient = saturate((LightRadius - InnerRadius) / ShellThickness);
+					DensityAlongLight += ComputeDensityAt(LightSamplePosition, InnerRadius, WeatherMap, 0.0, LightHeightGradient);
+					LightSamplePosition += SunDirection * LightStepSize;
 				}
 
-				const float StepContribution = StepSize * saturate(Density);
-				OpticalDepth += StepContribution;
-			}
-			else if (!bZeroDensityHit)
-			{
-				// Missed (zero density) while fine-stepping. 10 consecutive misses means we've walked out of
-				// the cloud — revert to coarse resolution instead of continuing to fine-step through empty sky.
-				ZeroDensityHitCount++;
-				if (ZeroDensityHitCount >= 10)
+				// max(BeersLaw, Powder) — avoids Powder(x)=0 at x=0 zeroing out brightness where the light
+				// path has little material (thin edges, should be brightest). HG normalized by its own peak
+				// (at CosAngle=1) since raw HG integrates to 1 over the whole sphere and is well below 1
+				// almost everywhere, which darkened the whole cloud instead of just the sun-aligned highlight.
+				const float BeersPowder = max(BeersLaw(DensityAlongLight), Powder(DensityAlongLight));
+				const float LightEnergy = BeersPowder * (HenyeyGreenstein(CosAngle, 0.2) / HGPeak);
+				WeightedLight += Density * LightEnergy;
+				AccumDensity += Density;
+				if (AccumDensity > 0.99)
 				{
-					bZeroDensityHit = true;
-					StepSize /= 0.3;
+					AccumDensity = 1.0;
+					break;
 				}
 			}
+			// else if (!bZeroDensityHit)
+			// {
+			// 	// Missed (zero density) while fine-stepping. 10 consecutive misses means we've walked out of
+			// 	// the cloud — revert to coarse resolution instead of continuing to fine-step through empty sky.
+			// 	ZeroDensityHitCount++;
+			// 	if (ZeroDensityHitCount >= 10)
+			// 	{
+			// 		bZeroDensityHit = true;
+			// 		StepSize /= 0.3;
+			// 	}
+			// }
 		}
 		// raymarch end -------------------------------------------------------------------------------
 
-		Color = 1.0 - exp(-OpticalDepth);
+		const float Opacity = saturate(AccumDensity);
+		const float AverageLight = AccumDensity > 0.0 ? saturate(WeightedLight / AccumDensity) : 1.0;
+		Color = Opacity * AverageLight;
 	}
 	break;
 	}

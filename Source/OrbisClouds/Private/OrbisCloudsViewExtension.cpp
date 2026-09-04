@@ -132,6 +132,7 @@ void FOrbisCloudsViewExtension::PrePostProcessPass_RenderThread(
 	PassParameters->CloudsTypeOctaves = PlanetForPass.CloudsTypeOctaves;
 	PassParameters->CloudsTypeLacunarity = PlanetForPass.CloudsTypeLacunarity;
 	PassParameters->CloudsTypeGain = PlanetForPass.CloudsTypeGain;
+	PassParameters->BaseShapeWorldSpan = PlanetForPass.BaseShapeWorldSpan;
 	PassParameters->CloudsViewMode = static_cast<uint32>(FMath::Clamp(
 		CVarOrbisCloudsViewMode.GetValueOnRenderThread(),
 		0,

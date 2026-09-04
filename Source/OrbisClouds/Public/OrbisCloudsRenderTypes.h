@@ -40,6 +40,7 @@ struct FOrbisCloudsPlanetRenderData
 	int32 CloudsTypeOctaves = 8;
 	float CloudsTypeLacunarity = 2.f;
 	float CloudsTypeGain = 0.5f;
+	float BaseShapeWorldSpan = 17000000.f;
 
 	// RHI refs, not raw UTexture pointers — safe to read on the render thread. Extracted from
 	// UOrbisCloudsComponent's BaseShapeNoiseTexture/DetailNoiseTexture on the game thread in

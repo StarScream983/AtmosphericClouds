@@ -154,6 +154,21 @@ void OrbisCloudsImGui::Draw(UOrbisCloudsComponent *Component)
 	}
 
 	ImGui::Separator();
+	ImGui::TextUnformatted("Authored Textures");
+
+	const bool bBaseShapeAssigned = Component->BaseShapeNoiseTexture != nullptr;
+	const bool bBaseShapeHasResource = bBaseShapeAssigned && Component->BaseShapeNoiseTexture->GetResource() != nullptr;
+	ImGui::Text(
+		"Base Shape Noise Texture: %s",
+		!bBaseShapeAssigned ? "NOT ASSIGNED" : (bBaseShapeHasResource ? "assigned, resource OK" : "assigned, NO RESOURCE (not loaded?)"));
+
+	if (ImGui::DragFloat("Base Shape World Span", &Component->BaseShapeWorldSpan, 10.f, 1.f, 1000000.f, "%.1f"))
+	{
+		Component->BaseShapeWorldSpan = FMath::Max(Component->BaseShapeWorldSpan, 1.f);
+		Component->NotifyChanged();
+	}
+
+	ImGui::Separator();
 	ImGui::TextUnformatted("Noise Output");
 
 	if (ImGui::DragFloat("Noise Output Min", &Component->NoiseOutputMin, 0.01f, -1.f, 1.f, "%.2f"))

@@ -93,6 +93,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Authored Textures")
 	TObjectPtr<UVolumeTexture> DetailNoiseTexture = nullptr;
 
+	// UU that one full tile of BaseShapeNoiseTexture covers — controls how large a single cloud puff reads as
+	// in world space. Exposed for live testing; was a hardcoded shader constant.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OrbisClouds|Authored Textures", meta = (ClampMin = "1.0"))
+	float BaseShapeWorldSpan = 17000000.f;
+
 	FOrbisCloudsPlanetRenderData BuildPlanetRenderData() const;
 	void NotifyChanged();
 
